@@ -70,12 +70,14 @@ model CardsInventory {
 }
 
 model Adventure {
-  id               Int    @id @default(autoincrement())
+  id               Int                 @id @default(autoincrement())
   chapter          Int
   title            String
-  requirementsJson String @map("requirements_json")
-  branchesJson     String @map("branches_json")
+  requirementsJson String              @map("requirements_json")
+  branchesJson     String              @map("branches_json")
   difficulty       Int
+  progress         AdventureProgress?
+  hints            HintStore[]
 
   @@map("adventures")
 }
@@ -89,12 +91,26 @@ model AdventureRun {
   @@map("adventure_runs")
 }
 
+
+model AdventureProgress {
+  id          Int       @id @default(autoincrement())
+  adventureId Int       @unique @map("adventure_id")
+  status      String    @default("LOCKED")
+  bestOutcome String?   @map("best_outcome")
+  updatedAt   DateTime  @default(now()) @map("updated_at")
+  adventure   Adventure @relation(fields: [adventureId], references: [id], onDelete: Cascade)
+
+  @@map("adventure_progress")
+}
+
 model HintStore {
-  id             Int    @id @default(autoincrement())
-  hintType       String @map("hint_type")
-  priceJson      String @map("price_json")
+  id             Int       @id @default(autoincrement())
+  adventureId    Int       @map("adventure_id")
+  hintType       String    @map("hint_type")
+  priceJson      String    @map("price_json")
   scope          String
-  difficultyBand Int    @map("difficulty_band")
+  difficultyBand Int       @map("difficulty_band")
+  adventure      Adventure @relation(fields: [adventureId], references: [id], onDelete: Cascade)
 
   @@map("hint_store")
 }
