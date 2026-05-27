@@ -1,4 +1,4 @@
-# Hero Habit Forge — Updated Project Request
+# Hero Habit Forge — Project Overview
 
 ## Product Goal
 Build a local-first, single-user daily goal and to-do management app with RPG progression.
