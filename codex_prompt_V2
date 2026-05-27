@@ -1,0 +1,211 @@
+# Codex Prompt v2 — Adventure Storyboard + Attribute Logic Layer
+
+## Purpose
+This v2 prompt extends (does not replace) the original codex prompt.
+Use this file when implementing narrative/adventure content so story logic, card progression, and attribute checks are coherent and testable.
+
+## Context
+Project: Hero Habit Forge  
+Existing core attributes:
+- physique
+- charisma
+- wisdom
+- sociability
+- farming
+- wealth
+- survival
+
+Card tiers:
+- PAPER
+- ROCK
+- BRONZE
+- SILVER
+- GOLD
+
+Current goal: design and implement a detective/adventure progression where:
+1. story events are triggered by player state,
+2. card tiers gate progression,
+3. hints can be purchased/unlocked,
+4. attribute checks determine success/failure branches,
+5. outcomes are narratively consistent with attribute logic.
+
+---
+
+## High-level design rules
+
+### Rule 1: Story must map to stats logically
+Do not create outcomes that break logic.
+Examples:
+- physique 1 can support minor physical actions, not elite combat.
+- survival + 3 ROCK cards can enable wilderness clue tracking.
+- high charisma can improve witness cooperation, but cannot replace all forensic requirements.
+
+### Rule 2: Multiple viable paths
+Each major case should support at least 2 solve paths:
+- a “direct/forceful” path (often physique/survival)
+- a “social/intellectual” path (charisma/sociability/wisdom/wealth)
+
+### Rule 3: No single-stat dominance
+Balance checks to prevent one attribute from solving every branch.
+Require mixed checks over time across chapters.
+
+### Rule 4: Card economy matters
+Card usage should be meaningful:
+- costs scale by tier and challenge difficulty
+- hints and retries consume resources
+- failed checks can still produce partial progress (soft-fail design)
+
+### Rule 5: Beginner accessibility
+Early chapters must be solvable with low-level builds.
+Hard gates should appear gradually.
+
+---
+
+## Required output before coding each new adventure chapter
+
+Before implementing a chapter, Codex must produce a short “Chapter Design Brief” including:
+
+1. Chapter title and narrative summary
+2. Trigger conditions
+3. Core clues and clue graph
+4. Required checks (attribute + minimum threshold + card requirement)
+5. Optional checks (alternate route unlocks)
+6. Hint options (type + cost + effect)
+7. Branch outcomes (success / partial / fail)
+8. Reward table (cards/stats/story unlocks)
+
+Do not implement chapter code until this brief is shown.
+
+---
+
+## Attribute logic matrix (baseline)
+
+Use this baseline unless adjusted by explicit balancing notes:
+
+- physique:
+  - low: intimidation posture, minor obstacle clearing
+  - mid: short fights/chases
+  - high: difficult physical confrontations
+
+- charisma:
+  - low: basic persuasion attempts
+  - mid: gain witness trust
+  - high: negotiate critical cooperation
+
+- wisdom:
+  - low: spot obvious contradictions
+  - mid: infer motive patterns
+  - high: reconstruct complex event timelines
+
+- sociability:
+  - low: make initial contacts
+  - mid: navigate groups/factions
+  - high: unlock hidden social channels
+
+- farming:
+  - low: identify common crop/soil signs
+  - mid: detect tampering in rural supply chains
+  - high: decode advanced agrarian patterns tied to crime
+
+- wealth:
+  - low: basic paid access
+  - mid: acquire specialized services/tools
+  - high: influence resource-heavy branches
+
+- survival:
+  - low: follow easy outdoor traces
+  - mid: track through rough terrain
+  - high: endure hazard zones and recover rare clues
+
+---
+
+## Suggested numeric gating template
+
+Use these default ranges for check design:
+- Novice checks: attribute >= 1, PAPER x1
+- Basic checks: attribute >= 2, PAPER x2 or ROCK x1
+- Intermediate checks: attribute >= 3, ROCK x2
+- Advanced checks: attribute >= 4, BRONZE x2
+- Expert checks: attribute >= 5, SILVER x2+
+- Master checks: attribute >= 6+, GOLD usage
+
+Codex may adjust numbers per chapter, but must explain why.
+
+---
+
+## Hint system requirements
+
+Every key blocker must have hints:
+1. Light hint: nudges direction (low cost)
+2. Medium hint: narrows options (mid cost)
+3. Strong hint: reveals specific actionable clue (high cost)
+
+Hint costs should scale with difficulty and chapter depth.
+Hints should not fully replace all challenge mechanics.
+
+---
+
+## Data model contract (for backend implementation)
+
+Adventure-related data should include:
+- chapter
+- title
+- trigger requirements
+- requirements JSON (checks)
+- branches JSON (choices/outcomes)
+- hint definitions
+- reward definitions
+- failure/partial/success states
+
+When adding/updating schema or seed data:
+- keep backward compatibility where possible,
+- provide migration notes,
+- include seed examples for at least one chapter.
+
+---
+
+## Implementation discipline
+
+When coding this layer, proceed in mini-phases:
+1. Define chapter brief
+2. Add/update schema fields (if needed)
+3. Add seed/story data
+4. Implement evaluator logic
+5. Implement API endpoints
+6. Implement minimal UI flow
+7. Run local verification
+8. Commit with clear phase-specific message
+
+---
+
+## Verification checklist (must run)
+
+For each adventure/story update, provide:
+
+- exact commands run
+- expected output
+- click-test steps on localhost
+- at least one sample scenario for:
+  - pass via physical path
+  - pass via social/intellectual path
+  - partial fail with hint recovery
+
+---
+
+## Non-technical explanation requirement
+
+After each phase, provide a simple-language working log:
+- what changed
+- why it matters for gameplay
+- what I should test on my MacBook
+- what success should look like
+
+---
+
+## Important constraints
+
+- Do not rewrite or replace original `codex_prompt.md`.
+- Treat this v2 prompt as an additive overlay for story/adventure phases.
+- Keep pull requests focused and mergeable.
+- Avoid unrelated refactors.
+- Ask approval before destructive operations.
