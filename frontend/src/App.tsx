@@ -16,6 +16,8 @@ type TodayTask = {
 };
 
 const API_BASE = 'http://localhost:3001';
+const ATTRIBUTE_OPTIONS = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Farming', 'Wealth', 'Survival'];
+const TIER_OPTIONS = ['Paper', 'Rock', 'Bronze', 'Silver', 'Gold'];
 
 export function App() {
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
@@ -86,9 +88,19 @@ export function App() {
         <h2>Task Templates</h2>
         <form onSubmit={createTemplate}>
           <input placeholder="Title" value={newTemplate.title} onChange={(e) => setNewTemplate({ ...newTemplate, title: e.target.value })} required />
-          <input placeholder="Cadence" value={newTemplate.cadenceRule} onChange={(e) => setNewTemplate({ ...newTemplate, cadenceRule: e.target.value })} required />
-          <input placeholder="Attribute" value={newTemplate.attribute} onChange={(e) => setNewTemplate({ ...newTemplate, attribute: e.target.value })} required />
-          <input placeholder="Tier" value={newTemplate.baseTier} onChange={(e) => setNewTemplate({ ...newTemplate, baseTier: e.target.value })} required />
+          <input list="cadence-options" placeholder="Cadence" value={newTemplate.cadenceRule} onChange={(e) => setNewTemplate({ ...newTemplate, cadenceRule: e.target.value })} required />
+          <datalist id="cadence-options">
+            <option value="daily" />
+            <option value="every other day" />
+            <option value="every tues & thursday" />
+            <option value="mon wed fri" />
+          </datalist>
+          <select value={newTemplate.attribute} onChange={(e) => setNewTemplate({ ...newTemplate, attribute: e.target.value })}>
+            {ATTRIBUTE_OPTIONS.map((attribute) => <option key={attribute} value={attribute}>{attribute}</option>)}
+          </select>
+          <select value={newTemplate.baseTier} onChange={(e) => setNewTemplate({ ...newTemplate, baseTier: e.target.value })}>
+            {TIER_OPTIONS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}
+          </select>
           <button type="submit">Add template</button>
         </form>
         <ul>
@@ -105,8 +117,12 @@ export function App() {
         <h2>Today Board</h2>
         <form onSubmit={createOneOff}>
           <input placeholder="One-off title" value={newOneOff.title} onChange={(e) => setNewOneOff({ ...newOneOff, title: e.target.value })} required />
-          <input placeholder="Attribute" value={newOneOff.attribute} onChange={(e) => setNewOneOff({ ...newOneOff, attribute: e.target.value })} required />
-          <input placeholder="Tier" value={newOneOff.baseTier} onChange={(e) => setNewOneOff({ ...newOneOff, baseTier: e.target.value })} required />
+          <select value={newOneOff.attribute} onChange={(e) => setNewOneOff({ ...newOneOff, attribute: e.target.value })}>
+            {ATTRIBUTE_OPTIONS.map((attribute) => <option key={attribute} value={attribute}>{attribute}</option>)}
+          </select>
+          <select value={newOneOff.baseTier} onChange={(e) => setNewOneOff({ ...newOneOff, baseTier: e.target.value })}>
+            {TIER_OPTIONS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}
+          </select>
           <button type="submit">Add one-off</button>
         </form>
 
