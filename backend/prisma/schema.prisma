@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum HeroRole {
+  HERO
+  BUDDY
+}
+
+enum CardTier {
+  PAPER
+  ROCK
+  BRONZE
+  SILVER
+  GOLD
+}
+
+enum TaskStatus {
+  ACTIVE
+  COMPLETED
+}
+
+model Hero {
+  id    Int      @id @default(autoincrement())
+  name  String
+  role  HeroRole @unique
+  stats HeroStat[]
+
+  @@map("heroes")
+}
+
+model Attribute {
+  id    Int        @id @default(autoincrement())
+  key   String     @unique
+  label String
+  stats HeroStat[]
+
+  @@map("attributes")
+}
+
+model HeroStat {
+  id           Int       @id @default(autoincrement())
+  heroId       Int       @map("hero_id")
+  attributeId  Int       @map("attribute_id")
+  level        Int       @default(0)
+  progressGold Int       @default(0) @map("progress_gold")
+  hero         Hero      @relation(fields: [heroId], references: [id], onDelete: Cascade)
+  attribute    Attribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+
+  @@unique([heroId, attributeId])
+  @@map("hero_stats")
+}
+
+model TaskTemplate {
+  id          Int     @id @default(autoincrement())
+  title       String
+  cadenceRule String  @map("cadence_rule")
+  attribute   String
+  baseTier    CardTier @map("base_tier")
+  isActive    Boolean @default(true) @map("is_active")
+
+  @@map("task_templates")
+}
+
+model TaskInstance {
+  id             Int        @id @default(autoincrement())
+  templateId     Int?       @map("template_id")
+  scheduledDate  DateTime   @map("scheduled_date")
+  status         TaskStatus @default(ACTIVE)
+  mergedGroupKey String?    @map("merged_group_key")
+
+  @@map("task_instances")
+}
+
+model CardsInventory {
+  id        Int      @id @default(autoincrement())
+  attribute String
+  tier      CardTier
+  count     Int      @default(0)
+
+  @@unique([attribute, tier])
+  @@map("cards_inventory")
+}
+
+model Adventure {
+  id               Int    @id @default(autoincrement())
+  chapter          Int
+  title            String
+  requirementsJson String @map("requirements_json")
+  branchesJson     String @map("branches_json")
+  difficulty       Int
+
+  @@map("adventures")
+}
+
+model AdventureRun {
+  id          Int      @id @default(autoincrement())
+  adventureId Int      @map("adventure_id")
+  playedAt    DateTime @default(now()) @map("played_at")
+  resultJson  String   @map("result_json")
+
+  @@map("adventure_runs")
+}
+
+model HintStore {
+  id             Int    @id @default(autoincrement())
+  hintType       String @map("hint_type")
+  priceJson      String @map("price_json")
+  scope          String
+  difficultyBand Int    @map("difficulty_band")
+
+  @@map("hint_store")
+}
