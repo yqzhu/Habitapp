@@ -33,8 +33,9 @@ function normalizeCadenceRule(input: string): string {
     if (n >= 1 && n <= 30) return n === 1 ? 'daily' : `every_${n}_day`;
   }
   const weekdayMap: Record<string, string> = {
-    mon: 'Mon', monday: 'Mon', tue: 'Tue', tues: 'Tue', tuesday: 'Tue', wed: 'Wed', weds: 'Wed', wednesday: 'Wed',
-    thu: 'Thu', thur: 'Thu', thurs: 'Thu', thursday: 'Thu', fri: 'Fri', friday: 'Fri', sat: 'Sat', saturday: 'Sat', sun: 'Sun', sunday: 'Sun',
+    mon: 'Mon', monday: 'Mon', tue: 'Tue', tues: 'Tue', tuesday: 'Tue',
+    wed: 'Wed', weds: 'Wed', wednesday: 'Wed', thu: 'Thu', thur: 'Thu', thurs: 'Thu', thursday: 'Thu',
+    fri: 'Fri', friday: 'Fri', sat: 'Sat', saturday: 'Sat', sun: 'Sun', sunday: 'Sun',
   };
   if (lower.startsWith('every ')) {
     const tokens = lower.slice(6).split(',').map((t) => t.trim()).filter(Boolean);
