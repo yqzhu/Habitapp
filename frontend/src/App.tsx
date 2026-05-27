@@ -37,7 +37,7 @@ export function App() {
 
   useEffect(() => { loadData(todayIso); }, []);
 
-  const createTemplate = async (event: FormEvent) => { event.preventDefault(); await fetch(`${API_BASE}/api/task-templates`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newTemplate) }); setNewTemplate({ title: '', cadenceRule: 'daily', attribute: 'Physique', baseTier: 'Paper' }); await loadData(); };
+  const createTemplate = async (event: FormEvent) => { event.preventDefault(); await fetch(`${API_BASE}/api/task-templates`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newTemplate, startDate: selectedDate }) }); setNewTemplate({ title: '', cadenceRule: 'daily', attribute: 'Physique', baseTier: 'Paper' }); await loadData(); };
   const toggleTemplate = async (template: TaskTemplate) => { await fetch(`${API_BASE}/api/task-templates/${template.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...template, isActive: !template.isActive }) }); await loadData(); };
   const createOneOff = async (event: FormEvent) => { event.preventDefault(); await fetch(`${API_BASE}/api/today-board/one-off`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newOneOff, date: selectedDate }) }); setNewOneOff({ title: '', attribute: 'Wisdom', baseTier: 'Paper' }); await loadData(); };
 
@@ -53,6 +53,27 @@ export function App() {
       return;
     }
     setBoardMessage(`Completed ${task.template?.title ?? 'task'} and received ${data.awardedCard.attribute}/${data.awardedCard.tier} card.`);
+    await loadData();
+  };
+
+
+  const cancelCadence = async (task: TodayTask) => {
+    if (!task.template?.id) return;
+    await fetch(`${API_BASE}/api/task-templates/${task.template.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...task.template, isActive: false }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setBoardMessage(data.error ?? 'Failed to complete task');
+      return;
+    }
+    setBoardMessage(`Completed ${task.template?.title ?? 'task'} and received ${data.awardedCard.attribute}/${data.awardedCard.tier} card.`);
+    await loadData();
+  };
+
+  const deleteTaskTemplate = async (task: TodayTask) => {
+    if (!task.template?.id) return;
+    await fetch(`${API_BASE}/api/task-templates/${task.template.id}`, { method: 'DELETE' });
     await loadData();
   };
 
@@ -85,7 +106,7 @@ export function App() {
           <select value={newTemplate.attribute} onChange={(e) => setNewTemplate({ ...newTemplate, attribute: e.target.value })}>{ATTRIBUTE_OPTIONS.map((attribute) => <option key={attribute} value={attribute}>{attribute}</option>)}</select>
           <select value={newTemplate.baseTier} onChange={(e) => setNewTemplate({ ...newTemplate, baseTier: e.target.value })}>{TIER_OPTIONS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}</select>
           <button type="submit">Add template</button></form>
-        <p>Cadence format: daily, every n day (n=1..6), or every Mon[,Tue,...].</p>
+        <p>Cadence format: daily, every n day (n=1..30), or every Mon[,Tue,...]. New template starts from selected date.</p>
         <ul>{templates.map((template) => <li key={template.id}>{template.title} ({template.cadenceRule}) → {template.attribute}/{template.baseTier} — {template.isActive ? 'Active' : 'Paused'}<button onClick={() => toggleTemplate(template)}>{template.isActive ? 'Pause' : 'Activate'}</button></li>)}</ul>
       </section>
 
@@ -96,7 +117,7 @@ export function App() {
           <select value={newOneOff.baseTier} onChange={(e) => setNewOneOff({ ...newOneOff, baseTier: e.target.value })}>{TIER_OPTIONS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}</select>
           <button type="submit">Add one-off</button></form>
         {boardMessage && <p>{boardMessage}</p>}
-        <ul>{todayTasks.map((task) => <li key={task.id}>[{task.status}] {task.template?.title ?? 'One-off task'} — {task.template?.attribute ?? 'Unmapped'} / {task.template?.baseTier ?? 'Paper'} (due {task.scheduledDate.slice(0, 10)})<button onClick={() => completeTask(task)}>Mark done</button></li>)}</ul>
+        <ul>{todayTasks.map((task) => <li key={task.id}>[{task.status}] {task.template?.title ?? 'One-off task'} — {task.template?.attribute ?? 'Unmapped'} / {task.template?.baseTier ?? 'Paper'} (due {task.scheduledDate.slice(0, 10)})<button onClick={() => completeTask(task)}>Mark done</button><button onClick={() => cancelCadence(task)}>Cancel cadence</button><button onClick={() => deleteTaskTemplate(task)}>Delete task</button></li>)}</ul>
       </section>
 
       <section>

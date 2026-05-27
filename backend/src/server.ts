@@ -16,41 +16,39 @@ function atMidnight(date: Date): Date {
   return out;
 }
 
+function parseLocalDate(input?: string): Date {
+  if (!input) return atMidnight(new Date());
+  const [y, m, d] = input.split('-').map(Number);
+  if (!y || !m || !d) return atMidnight(new Date(input));
+  return atMidnight(new Date(y, m - 1, d));
+}
+
 function normalizeCadenceRule(input: string): string {
   const raw = input.trim();
   const lower = raw.toLowerCase();
   if (lower === 'daily') return 'daily';
-
   const everyNDayMatch = lower.match(/^every\s+(\d+)\s+day(?:s)?$/);
   if (everyNDayMatch) {
     const n = Number(everyNDayMatch[1]);
     if (n >= 1 && n <= 30) return n === 1 ? 'daily' : `every_${n}_day`;
   }
-
   const weekdayMap: Record<string, string> = {
     mon: 'Mon', monday: 'Mon', tue: 'Tue', tues: 'Tue', tuesday: 'Tue',
     wed: 'Wed', weds: 'Wed', wednesday: 'Wed', thu: 'Thu', thur: 'Thu', thurs: 'Thu', thursday: 'Thu',
     fri: 'Fri', friday: 'Fri', sat: 'Sat', saturday: 'Sat', sun: 'Sun', sunday: 'Sun',
   };
-
   if (lower.startsWith('every ')) {
     const tokens = lower.slice(6).split(',').map((t) => t.trim()).filter(Boolean);
     const days = Array.from(new Set(tokens.map((t) => weekdayMap[t]).filter(Boolean)));
     if (days.length > 0 && days.length === tokens.length) return `weekdays:${days.join(',')}`;
   }
-
   return raw;
 }
 
 function isSupportedCadenceRule(cadenceRule: string): boolean {
   if (cadenceRule === 'daily') return true;
-
   const everyNDayMatch = cadenceRule.match(/^every_(\d+)_day$/);
-  if (everyNDayMatch) {
-    const n = Number(everyNDayMatch[1]);
-    return n >= 2 && n <= 30;
-  }
-
+  if (everyNDayMatch) return Number(everyNDayMatch[1]) >= 2 && Number(everyNDayMatch[1]) <= 30;
   if (cadenceRule.startsWith('weekdays:')) {
     const days = cadenceRule.replace('weekdays:', '').split(',').map((d) => d.trim()).filter(Boolean);
     return days.length > 0 && days.every((d) => WEEKDAYS.includes(d as typeof WEEKDAYS[number]));
@@ -58,17 +56,14 @@ function isSupportedCadenceRule(cadenceRule: string): boolean {
   return false;
 }
 
-function cadenceMatchesDate(cadenceRule: string, date: Date): boolean {
+function cadenceMatchesDate(cadenceRule: string, date: Date, anchorDate: Date): boolean {
   if (cadenceRule === 'daily') return true;
-
   const everyNDayMatch = cadenceRule.match(/^every_(\d+)_day$/);
   if (everyNDayMatch) {
     const n = Number(everyNDayMatch[1]);
-    const epoch = atMidnight(new Date('2025-01-01'));
-    const diff = Math.floor((date.getTime() - epoch.getTime()) / 86400000);
-    return diff % n === 0;
+    const diff = Math.floor((date.getTime() - anchorDate.getTime()) / 86400000);
+    return diff >= 0 && diff % n === 0;
   }
-
   if (cadenceRule.startsWith('weekdays:')) {
     const set = new Set(cadenceRule.replace('weekdays:', '').split(',').map((d) => d.trim()));
     return set.has(WEEKDAYS[date.getDay()]);
@@ -81,18 +76,20 @@ app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ ok: true, app: 'Hero Habit Forge API' }));
 app.get('/api/bootstrap', (_req, res) => res.json({ appName: 'Hero Habit Forge', phase: 'Cards + Forge', next: 'Hero/Buddy stats' }));
-
 app.get('/api/task-templates', async (_req, res) => res.json(await prisma.taskTemplate.findMany({ orderBy: { id: 'asc' } })));
 
 app.post('/api/task-templates', async (req, res) => {
-  const { title, cadenceRule, attribute, baseTier } = req.body;
+  const { title, cadenceRule, attribute, baseTier, startDate } = req.body;
   if (!title || !cadenceRule || !attribute || !baseTier) return res.status(400).json({ error: 'title, cadenceRule, attribute, and baseTier are required' });
   if (!CANONICAL_ATTRIBUTES.includes(attribute) || !CANONICAL_TIERS.includes(baseTier)) return res.status(400).json({ error: 'attribute or baseTier is invalid' });
   const normalizedCadenceRule = normalizeCadenceRule(cadenceRule);
-  if (!isSupportedCadenceRule(normalizedCadenceRule)) {
-    return res.status(400).json({ error: 'Unsupported cadence. Use: daily, every n day (n=1..30), or every Mon[, Tue, ...]' });
-  }
+  if (!isSupportedCadenceRule(normalizedCadenceRule)) return res.status(400).json({ error: 'Unsupported cadence. Use: daily, every n day (n=1..30), or every Mon[, Tue, ...]' });
+
+  const anchorDate = parseLocalDate(startDate);
   const template = await prisma.taskTemplate.create({ data: { title, cadenceRule: normalizedCadenceRule, attribute, baseTier, isActive: true } });
+  if (cadenceMatchesDate(normalizedCadenceRule, anchorDate, anchorDate)) {
+    await prisma.taskInstance.create({ data: { templateId: template.id, scheduledDate: anchorDate, status: 'ACTIVE', mergedGroupKey: `template-${template.id}` } });
+  }
   return res.status(201).json(template);
 });
 
@@ -103,82 +100,60 @@ app.patch('/api/task-templates/:id', async (req, res) => {
   if (attribute && !CANONICAL_ATTRIBUTES.includes(attribute)) return res.status(400).json({ error: 'attribute is invalid' });
   if (baseTier && !CANONICAL_TIERS.includes(baseTier)) return res.status(400).json({ error: 'baseTier is invalid' });
   const normalizedCadenceRule = cadenceRule ? normalizeCadenceRule(cadenceRule) : undefined;
-  if (normalizedCadenceRule && !isSupportedCadenceRule(normalizedCadenceRule)) {
-    return res.status(400).json({ error: 'Unsupported cadence. Use: daily, every n day (n=1..30), or every Mon[, Tue, ...]' });
-  }
-  const template = await prisma.taskTemplate.update({ where: { id }, data: { title, cadenceRule: normalizedCadenceRule, attribute, baseTier, isActive } });
-  return res.json(template);
+  if (normalizedCadenceRule && !isSupportedCadenceRule(normalizedCadenceRule)) return res.status(400).json({ error: 'Unsupported cadence. Use: daily, every n day (n=1..30), or every Mon[, Tue, ...]' });
+  res.json(await prisma.taskTemplate.update({ where: { id }, data: { title, cadenceRule: normalizedCadenceRule, attribute, baseTier, isActive } }));
+});
+
+app.delete('/api/task-templates/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid template id' });
+  await prisma.taskInstance.deleteMany({ where: { templateId: id } });
+  await prisma.taskTemplate.delete({ where: { id } });
+  res.json({ success: true });
 });
 
 app.get('/api/today-board', async (req, res) => {
-  const requestedDate = typeof req.query.date === 'string' ? atMidnight(new Date(req.query.date)) : atMidnight(new Date());
-  const today = atMidnight(new Date());
-  const boardDate = requestedDate < today ? today : requestedDate;
+  const boardDate = parseLocalDate(typeof req.query.date === 'string' ? req.query.date : undefined);
 
   const activeTemplates = await prisma.taskTemplate.findMany({ where: { isActive: true }, orderBy: { id: 'asc' } });
-  const existingActive = await prisma.taskInstance.findMany({ where: { status: 'ACTIVE', scheduledDate: { lte: boardDate } }, orderBy: { id: 'asc' } });
-  const existingByTemplate = new Map(existingActive.filter((t: { templateId: number | null }) => t.templateId !== null).map((t: { templateId: number | null }) => [t.templateId as number, t]));
-
   for (const template of activeTemplates) {
-    const hasOpenTask = existingByTemplate.has(template.id);
-    if (!hasOpenTask && cadenceMatchesDate(template.cadenceRule, boardDate)) {
-      const created = await prisma.taskInstance.create({
-        data: { templateId: template.id, scheduledDate: boardDate, status: 'ACTIVE', mergedGroupKey: `template-${template.id}` },
-      });
-      existingByTemplate.set(template.id, created);
+    const earliest = await prisma.taskInstance.findFirst({ where: { templateId: template.id }, orderBy: { scheduledDate: 'asc' } });
+    const anchorDate = earliest ? atMidnight(earliest.scheduledDate) : boardDate;
+    const existsOnDate = await prisma.taskInstance.findFirst({ where: { templateId: template.id, scheduledDate: boardDate } });
+    if (!existsOnDate && cadenceMatchesDate(template.cadenceRule, boardDate, anchorDate)) {
+      await prisma.taskInstance.create({ data: { templateId: template.id, scheduledDate: boardDate, status: 'ACTIVE', mergedGroupKey: `template-${template.id}` } });
     }
   }
 
-  const allActive = await prisma.taskInstance.findMany({ where: { status: 'ACTIVE', scheduledDate: { lte: boardDate } }, orderBy: { scheduledDate: 'asc' } });
+  const allActive = await prisma.taskInstance.findMany({ where: { status: 'ACTIVE', scheduledDate: { lte: boardDate } }, orderBy: [{ scheduledDate: 'asc' }, { id: 'asc' }] });
   const templateIds = [...new Set(allActive.map((task: { templateId: number | null }) => task.templateId).filter((id: number | null): id is number => id !== null))];
   const templates = await prisma.taskTemplate.findMany({ where: { id: { in: templateIds } } });
   const templateMap = new Map(templates.map((t: { id: number }) => [t.id, t]));
-
-  res.json({
-    boardDate: boardDate.toISOString().slice(0, 10),
-    tasks: allActive.map((task: { templateId: number | null }) => ({ ...task, template: task.templateId ? templateMap.get(task.templateId) ?? null : null })),
-  });
+  res.json({ boardDate: boardDate.toISOString().slice(0, 10), tasks: allActive.map((task: { templateId: number | null }) => ({ ...task, template: task.templateId ? templateMap.get(task.templateId) ?? null : null })) });
 });
 
 app.post('/api/today-board/one-off', async (req, res) => {
   const { title, attribute, baseTier, date } = req.body;
   if (!title || !attribute || !baseTier) return res.status(400).json({ error: 'title, attribute, and baseTier are required' });
   if (!CANONICAL_ATTRIBUTES.includes(attribute) || !CANONICAL_TIERS.includes(baseTier)) return res.status(400).json({ error: 'attribute or baseTier is invalid' });
-  const scheduledDate = atMidnight(date ? new Date(date) : new Date());
-
-  const oneOffTemplate = await prisma.taskTemplate.create({
-    data: { title, cadenceRule: 'one-off', attribute, baseTier, isActive: false },
-  });
-
-  const task = await prisma.taskInstance.create({
-    data: { templateId: oneOffTemplate.id, scheduledDate, status: 'ACTIVE', mergedGroupKey: `oneoff-${oneOffTemplate.id}` },
-  });
-
+  const scheduledDate = parseLocalDate(date);
+  const oneOffTemplate = await prisma.taskTemplate.create({ data: { title, cadenceRule: 'one-off', attribute, baseTier, isActive: false } });
+  const task = await prisma.taskInstance.create({ data: { templateId: oneOffTemplate.id, scheduledDate, status: 'ACTIVE', mergedGroupKey: `oneoff-${oneOffTemplate.id}` } });
   return res.status(201).json({ ...task, template: oneOffTemplate });
 });
 
 app.patch('/api/today-board/:id/status', async (req, res) => {
   const id = Number(req.params.id);
-  const { status } = req.body;
-  if (Number.isNaN(id) || status !== 'DONE') return res.status(400).json({ error: 'Only marking task DONE is supported' });
-
+  if (Number.isNaN(id) || req.body.status !== 'DONE') return res.status(400).json({ error: 'Only marking task DONE is supported' });
   const task = await prisma.taskInstance.findUnique({ where: { id } });
-  if (!task || task.status !== 'ACTIVE') return res.status(404).json({ error: 'Active task not found' });
-  if (task.templateId === null) return res.status(400).json({ error: 'Task has no template mapping' });
-
+  if (!task || task.status !== 'ACTIVE' || task.templateId === null) return res.status(404).json({ error: 'Active task not found' });
   const template = await prisma.taskTemplate.findUnique({ where: { id: task.templateId } });
   if (!template) return res.status(404).json({ error: 'Template not found' });
-
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.taskInstance.update({ where: { id }, data: { status: 'DONE' } });
-    await tx.cardsInventory.upsert({
-      where: { attribute_tier: { attribute: template.attribute, tier: template.baseTier } },
-      create: { attribute: template.attribute, tier: template.baseTier, count: 1 },
-      update: { count: { increment: 1 } },
-    });
+    await tx.cardsInventory.upsert({ where: { attribute_tier: { attribute: template.attribute, tier: template.baseTier } }, create: { attribute: template.attribute, tier: template.baseTier, count: 1 }, update: { count: { increment: 1 } } });
   });
-
-  return res.json({ success: true, awardedCard: { attribute: template.attribute, tier: template.baseTier } });
+  res.json({ success: true, awardedCard: { attribute: template.attribute, tier: template.baseTier } });
 });
 
 app.get('/api/cards/inventory', async (_req, res) => {
@@ -193,7 +168,6 @@ app.post('/api/cards/forge', async (req, res) => {
   const i = CANONICAL_TIERS.indexOf(tier);
   if (i === CANONICAL_TIERS.length - 1) return res.status(400).json({ error: 'Gold cards cannot be merged further' });
   const nextTier = CANONICAL_TIERS[i + 1];
-
   try {
     const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const current = await tx.cardsInventory.findUnique({ where: { attribute_tier: { attribute, tier } } });
@@ -203,9 +177,9 @@ app.post('/api/cards/forge', async (req, res) => {
       await tx.cardsInventory.upsert({ where: { attribute_tier: { attribute, tier: nextTier } }, create: { attribute, tier: nextTier, count: 1 }, update: { count: { increment: 1 } } });
       return { attribute, consumedTier: tier, producedTier: nextTier };
     });
-    return res.json({ success: true, ...result });
+    res.json({ success: true, ...result });
   } catch (error) {
-    return res.status(400).json({ error: error instanceof Error ? error.message : 'Merge failed' });
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Merge failed' });
   }
 });
 
