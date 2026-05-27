@@ -5,6 +5,8 @@ const prisma = new PrismaClient();
 const attributes = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Farming', 'Wealth', 'Survival'];
 const tiers = ['Paper', 'Rock', 'Bronze', 'Silver', 'Gold'];
 
+const tiers = ['Paper', 'Rock', 'Bronze', 'Silver', 'Gold'];
+
 async function main() {
   await prisma.hero.upsert({ where: { role: 'HERO' }, update: {}, create: { name: 'Hero', role: 'HERO' } });
   await prisma.hero.upsert({ where: { role: 'BUDDY' }, update: {}, create: { name: 'Buddy', role: 'BUDDY' } });
