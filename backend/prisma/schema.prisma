@@ -7,28 +7,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum HeroRole {
-  HERO
-  BUDDY
-}
-
-enum CardTier {
-  PAPER
-  ROCK
-  BRONZE
-  SILVER
-  GOLD
-}
-
-enum TaskStatus {
-  ACTIVE
-  COMPLETED
-}
-
 model Hero {
   id    Int      @id @default(autoincrement())
   name  String
-  role  HeroRole @unique
+  role  String   @unique
   stats HeroStat[]
 
   @@map("heroes")
@@ -61,27 +43,27 @@ model TaskTemplate {
   title       String
   cadenceRule String  @map("cadence_rule")
   attribute   String
-  baseTier    CardTier @map("base_tier")
+  baseTier    String  @map("base_tier")
   isActive    Boolean @default(true) @map("is_active")
 
   @@map("task_templates")
 }
 
 model TaskInstance {
-  id             Int        @id @default(autoincrement())
-  templateId     Int?       @map("template_id")
-  scheduledDate  DateTime   @map("scheduled_date")
-  status         TaskStatus @default(ACTIVE)
-  mergedGroupKey String?    @map("merged_group_key")
+  id             Int      @id @default(autoincrement())
+  templateId     Int?     @map("template_id")
+  scheduledDate  DateTime @map("scheduled_date")
+  status         String   @default("ACTIVE")
+  mergedGroupKey String?  @map("merged_group_key")
 
   @@map("task_instances")
 }
 
 model CardsInventory {
-  id        Int      @id @default(autoincrement())
+  id        Int    @id @default(autoincrement())
   attribute String
-  tier      CardTier
-  count     Int      @default(0)
+  tier      String
+  count     Int    @default(0)
 
   @@unique([attribute, tier])
   @@map("cards_inventory")
