@@ -1,139 +1,132 @@
 import { FormEvent, useEffect, useState } from 'react';
 
-type TaskTemplate = {
-  id: number;
-  title: string;
-  cadenceRule: string;
-  attribute: string;
-  baseTier: string;
-  isActive: boolean;
-};
-
-type TodayTask = {
-  id: number;
-  status: 'ACTIVE' | 'DONE';
-  template: TaskTemplate | null;
-};
+type TaskTemplate = { id: number; title: string; cadenceRule: string; attribute: string; baseTier: string; isActive: boolean };
+type TodayTask = { id: number; status: 'ACTIVE' | 'DONE'; scheduledDate: string; template: TaskTemplate | null; isDone?: boolean };
+type InventoryGroup = { attribute: string; tiers: { tier: string; count: number }[] };
 
 const API_BASE = 'http://localhost:3001';
 const ATTRIBUTE_OPTIONS = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Farming', 'Wealth', 'Survival'];
 const TIER_OPTIONS = ['Paper', 'Rock', 'Bronze', 'Silver', 'Gold'];
+const formatLocalDate = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+const todayIso = formatLocalDate(new Date());
 
 export function App() {
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [todayTasks, setTodayTasks] = useState<TodayTask[]>([]);
+  const [inventory, setInventory] = useState<InventoryGroup[]>([]);
+  const [selectedDate, setSelectedDate] = useState(todayIso);
+  const [boardMessage, setBoardMessage] = useState('');
+  const [forgeAttribute, setForgeAttribute] = useState('Physique');
+  const [forgeTier, setForgeTier] = useState('Paper');
+  const [forgeMessage, setForgeMessage] = useState('');
   const [newTemplate, setNewTemplate] = useState({ title: '', cadenceRule: 'daily', attribute: 'Physique', baseTier: 'Paper' });
   const [newOneOff, setNewOneOff] = useState({ title: '', attribute: 'Wisdom', baseTier: 'Paper' });
 
-  const loadData = async () => {
-    const [templatesRes, todayRes] = await Promise.all([
+  const loadData = async (date = selectedDate) => {
+    const [templatesRes, todayRes, inventoryRes] = await Promise.all([
       fetch(`${API_BASE}/api/task-templates`),
-      fetch(`${API_BASE}/api/today-board`),
+      fetch(`${API_BASE}/api/today-board?date=${date}`),
+      fetch(`${API_BASE}/api/cards/inventory`),
     ]);
 
     setTemplates(await templatesRes.json());
-    setTodayTasks(await todayRes.json());
+    const boardData = await todayRes.json();
+    setTodayTasks((boardData.tasks ?? []).map((t: TodayTask) => ({ ...t, isDone: false })));
+    const inventoryData = await inventoryRes.json();
+    setInventory(inventoryData.inventory ?? []);
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(todayIso); }, []);
 
-  const createTemplate = async (event: FormEvent) => {
-    event.preventDefault();
-    await fetch(`${API_BASE}/api/task-templates`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newTemplate),
-    });
-    setNewTemplate({ title: '', cadenceRule: 'daily', attribute: 'Physique', baseTier: 'Paper' });
-    await loadData();
-  };
+  const createTemplate = async (event: FormEvent) => { event.preventDefault(); await fetch(`${API_BASE}/api/task-templates`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newTemplate, startDate: selectedDate }) }); setNewTemplate({ title: '', cadenceRule: 'daily', attribute: 'Physique', baseTier: 'Paper' }); await loadData(); };
+  const toggleTemplate = async (template: TaskTemplate) => { await fetch(`${API_BASE}/api/task-templates/${template.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...template, isActive: !template.isActive }) }); await loadData(); };
+  const createOneOff = async (event: FormEvent) => { event.preventDefault(); await fetch(`${API_BASE}/api/today-board/one-off`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newOneOff, date: selectedDate }) }); setNewOneOff({ title: '', attribute: 'Wisdom', baseTier: 'Paper' }); await loadData(); };
 
-  const toggleTemplate = async (template: TaskTemplate) => {
-    await fetch(`${API_BASE}/api/task-templates/${template.id}`, {
+  const completeTask = async (task: TodayTask) => {
+    const res = await fetch(`${API_BASE}/api/today-board/${task.id}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...template, isActive: !template.isActive }),
+      body: JSON.stringify({ status: 'DONE' }),
     });
+    const data = await res.json();
+    if (!res.ok) {
+      setBoardMessage(data.error ?? 'Failed to complete task');
+      return;
+    }
+    setBoardMessage(`Completed ${task.template?.title ?? 'task'} and received ${data.awardedCard.attribute}/${data.awardedCard.tier} card.`);
+    setTodayTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, isDone: true } : t)));
     await loadData();
   };
 
-  const createOneOff = async (event: FormEvent) => {
+
+  const cancelCadence = async (task: TodayTask) => {
+    await fetch(`${API_BASE}/api/today-board/${task.id}/cancel`, { method: 'PATCH' });
+    setBoardMessage(`Cancelled this task occurrence: ${task.template?.title ?? 'task'}.`);
+    await loadData();
+  };
+
+  const deleteTaskTemplate = async (task: TodayTask) => {
+    if (!task.template?.id) return;
+    await fetch(`${API_BASE}/api/task-templates/${task.template.id}`, { method: 'DELETE' });
+    await loadData();
+  };
+
+  const forgeCards = async (event: FormEvent) => {
     event.preventDefault();
-    await fetch(`${API_BASE}/api/today-board/one-off`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newOneOff),
+    setForgeMessage('');
+    const res = await fetch(`${API_BASE}/api/cards/forge`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attribute: forgeAttribute, tier: forgeTier }),
     });
-    setNewOneOff({ title: '', attribute: 'Wisdom', baseTier: 'Paper' });
-    await loadData();
-  };
-
-  const toggleTodayTask = async (task: TodayTask) => {
-    const nextStatus = task.status === 'DONE' ? 'ACTIVE' : 'DONE';
-    await fetch(`${API_BASE}/api/today-board/${task.id}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: nextStatus }),
-    });
+    const data = await res.json();
+    if (!res.ok) return setForgeMessage(data.error ?? 'Merge failed');
+    setForgeMessage(`Merged 3 ${forgeAttribute} ${forgeTier} cards into 1 ${data.producedTier} card.`);
     await loadData();
   };
 
   return (
     <main className="container">
-      <h1>Hero Habit Forge — Phase 3</h1>
+      <h1>Hero Habit Forge — Phase 4</h1>
 
-      <section>
-        <h2>Task Templates</h2>
-        <form onSubmit={createTemplate}>
-          <input placeholder="Title" value={newTemplate.title} onChange={(e) => setNewTemplate({ ...newTemplate, title: e.target.value })} required />
+      <section><h2>Task Templates</h2>
+        <form onSubmit={createTemplate}><input placeholder="Title" value={newTemplate.title} onChange={(e) => setNewTemplate({ ...newTemplate, title: e.target.value })} required />
           <input list="cadence-options" placeholder="Cadence" value={newTemplate.cadenceRule} onChange={(e) => setNewTemplate({ ...newTemplate, cadenceRule: e.target.value })} required />
           <datalist id="cadence-options">
             <option value="daily" />
-            <option value="every other day" />
-            <option value="every tues & thursday" />
-            <option value="mon wed fri" />
+            <option value="every 1 day" />
+            <option value="every 2 day" />
+            <option value="every Fri" />
+            <option value="every Mon,Wed,Fri" />
           </datalist>
-          <select value={newTemplate.attribute} onChange={(e) => setNewTemplate({ ...newTemplate, attribute: e.target.value })}>
-            {ATTRIBUTE_OPTIONS.map((attribute) => <option key={attribute} value={attribute}>{attribute}</option>)}
-          </select>
-          <select value={newTemplate.baseTier} onChange={(e) => setNewTemplate({ ...newTemplate, baseTier: e.target.value })}>
-            {TIER_OPTIONS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}
-          </select>
-          <button type="submit">Add template</button>
-        </form>
-        <ul>
-          {templates.map((template) => (
-            <li key={template.id}>
-              {template.title} ({template.cadenceRule}) → {template.attribute}/{template.baseTier} — {template.isActive ? 'Active' : 'Paused'}
-              <button onClick={() => toggleTemplate(template)}>{template.isActive ? 'Pause' : 'Activate'}</button>
-            </li>
-          ))}
-        </ul>
+          <select value={newTemplate.attribute} onChange={(e) => setNewTemplate({ ...newTemplate, attribute: e.target.value })}>{ATTRIBUTE_OPTIONS.map((attribute) => <option key={attribute} value={attribute}>{attribute}</option>)}</select>
+          <select value={newTemplate.baseTier} onChange={(e) => setNewTemplate({ ...newTemplate, baseTier: e.target.value })}>{TIER_OPTIONS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}</select>
+          <button type="submit">Add template</button></form>
+        <p>Cadence format: daily, every n day (n=1..30), or every Mon[,Tue,...]. New template starts from selected date.</p>
+        <ul>{templates.map((template) => <li key={template.id}>{template.title} ({template.cadenceRule}) → {template.attribute}/{template.baseTier} — {template.isActive ? 'Active' : 'Paused'}<button onClick={() => toggleTemplate(template)}>{template.isActive ? 'Pause' : 'Activate'}</button></li>)}</ul>
+      </section>
+
+      <section><h2>Today Board</h2>
+        <label>Pick date: <input type="date" min={todayIso} value={selectedDate} onChange={(e) => { setSelectedDate(e.target.value); void loadData(e.target.value); }} /></label>
+        <form onSubmit={createOneOff}><input placeholder="One-off title" value={newOneOff.title} onChange={(e) => setNewOneOff({ ...newOneOff, title: e.target.value })} required />
+          <select value={newOneOff.attribute} onChange={(e) => setNewOneOff({ ...newOneOff, attribute: e.target.value })}>{ATTRIBUTE_OPTIONS.map((attribute) => <option key={attribute} value={attribute}>{attribute}</option>)}</select>
+          <select value={newOneOff.baseTier} onChange={(e) => setNewOneOff({ ...newOneOff, baseTier: e.target.value })}>{TIER_OPTIONS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}</select>
+          <button type="submit">Add one-off</button></form>
+        {boardMessage && <p>{boardMessage}</p>}
+        <ul>{todayTasks.map((task) => <li key={task.id} style={{ opacity: task.isDone ? 0.5 : 1 }}>[{task.status}] {task.template?.title ?? 'One-off task'} — {task.template?.attribute ?? 'Unmapped'} / {task.template?.baseTier ?? 'Paper'} (due {task.scheduledDate.slice(0, 10)})<button disabled={task.isDone} onClick={() => completeTask(task)}>{task.isDone ? 'Done' : 'Mark done'}</button><button onClick={() => cancelCadence(task)}>Cancel cadence</button><button onClick={() => deleteTaskTemplate(task)}>Delete task</button></li>)}</ul>
       </section>
 
       <section>
-        <h2>Today Board</h2>
-        <form onSubmit={createOneOff}>
-          <input placeholder="One-off title" value={newOneOff.title} onChange={(e) => setNewOneOff({ ...newOneOff, title: e.target.value })} required />
-          <select value={newOneOff.attribute} onChange={(e) => setNewOneOff({ ...newOneOff, attribute: e.target.value })}>
-            {ATTRIBUTE_OPTIONS.map((attribute) => <option key={attribute} value={attribute}>{attribute}</option>)}
-          </select>
-          <select value={newOneOff.baseTier} onChange={(e) => setNewOneOff({ ...newOneOff, baseTier: e.target.value })}>
-            {TIER_OPTIONS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}
-          </select>
-          <button type="submit">Add one-off</button>
-        </form>
-
-        <ul>
-          {todayTasks.map((task) => (
-            <li key={task.id}>
-              [{task.status}] {task.template?.title ?? 'One-off task'} — {task.template?.attribute ?? 'Unmapped'} / {task.template?.baseTier ?? 'Paper'}
-              <button onClick={() => toggleTodayTask(task)}>{task.status === 'DONE' ? 'Mark active' : 'Mark done'}</button>
-            </li>
-          ))}
-        </ul>
+        <h2>Card Inventory + Forge</h2>
+        <p>Merge rule: 3 cards of same attribute+tier turns into 1 card of next tier.</p>
+        <table><thead><tr><th>Attribute</th>{TIER_OPTIONS.map((tier) => <th key={tier}>{tier}</th>)}</tr></thead>
+          <tbody>{inventory.map((row) => <tr key={row.attribute}><td>{row.attribute}</td>{row.tiers.map((tierInfo) => <td key={`${row.attribute}-${tierInfo.tier}`}>{tierInfo.count}</td>)}</tr>)}</tbody></table>
+        <form onSubmit={forgeCards}><select value={forgeAttribute} onChange={(e) => setForgeAttribute(e.target.value)}>{ATTRIBUTE_OPTIONS.map((attribute) => <option key={attribute} value={attribute}>{attribute}</option>)}</select>
+          <select value={forgeTier} onChange={(e) => setForgeTier(e.target.value)}>{TIER_OPTIONS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}</select><button type="submit">Merge 3 → 1</button></form>
+        {forgeMessage && <p>{forgeMessage}</p>}
       </section>
     </main>
   );
