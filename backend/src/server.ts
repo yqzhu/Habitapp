@@ -142,6 +142,16 @@ app.post('/api/today-board/one-off', async (req, res) => {
   return res.status(201).json({ ...task, template: oneOffTemplate });
 });
 
+
+app.patch('/api/today-board/:id/cancel', async (req, res) => {
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid task id' });
+  const task = await prisma.taskInstance.findUnique({ where: { id } });
+  if (!task || task.status !== 'ACTIVE') return res.status(404).json({ error: 'Active task not found' });
+  const updated = await prisma.taskInstance.update({ where: { id }, data: { status: 'CANCELLED' } });
+  res.json({ success: true, task: updated });
+});
+
 app.patch('/api/today-board/:id/status', async (req, res) => {
   const id = Number(req.params.id);
   if (Number.isNaN(id) || req.body.status !== 'DONE') return res.status(400).json({ error: 'Only marking task DONE is supported' });

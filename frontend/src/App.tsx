@@ -65,16 +65,8 @@ export function App() {
 
 
   const cancelCadence = async (task: TodayTask) => {
-    if (!task.template?.id) return;
-    await fetch(`${API_BASE}/api/task-templates/${task.template.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...task.template, isActive: false }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setBoardMessage(data.error ?? 'Failed to complete task');
-      return;
-    }
-    setBoardMessage(`Completed ${task.template?.title ?? 'task'} and received ${data.awardedCard.attribute}/${data.awardedCard.tier} card.`);
+    await fetch(`${API_BASE}/api/today-board/${task.id}/cancel`, { method: 'PATCH' });
+    setBoardMessage(`Cancelled this task occurrence: ${task.template?.title ?? 'task'}.`);
     await loadData();
   };
 
