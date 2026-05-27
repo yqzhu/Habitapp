@@ -1,13 +1,19 @@
 import { FormEvent, useEffect, useState } from 'react';
 
 type TaskTemplate = { id: number; title: string; cadenceRule: string; attribute: string; baseTier: string; isActive: boolean };
-type TodayTask = { id: number; status: 'ACTIVE' | 'DONE'; scheduledDate: string; template: TaskTemplate | null };
+type TodayTask = { id: number; status: 'ACTIVE' | 'DONE'; scheduledDate: string; template: TaskTemplate | null; isDone?: boolean };
 type InventoryGroup = { attribute: string; tiers: { tier: string; count: number }[] };
 
 const API_BASE = 'http://localhost:3001';
 const ATTRIBUTE_OPTIONS = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Farming', 'Wealth', 'Survival'];
 const TIER_OPTIONS = ['Paper', 'Rock', 'Bronze', 'Silver', 'Gold'];
-const todayIso = new Date().toISOString().slice(0, 10);
+const formatLocalDate = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+const todayIso = formatLocalDate(new Date());
 
 export function App() {
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
@@ -30,7 +36,7 @@ export function App() {
 
     setTemplates(await templatesRes.json());
     const boardData = await todayRes.json();
-    setTodayTasks(boardData.tasks ?? []);
+    setTodayTasks((boardData.tasks ?? []).map((t: TodayTask) => ({ ...t, isDone: false })));
     const inventoryData = await inventoryRes.json();
     setInventory(inventoryData.inventory ?? []);
   };
@@ -53,6 +59,7 @@ export function App() {
       return;
     }
     setBoardMessage(`Completed ${task.template?.title ?? 'task'} and received ${data.awardedCard.attribute}/${data.awardedCard.tier} card.`);
+    setTodayTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, isDone: true } : t)));
     await loadData();
   };
 
@@ -117,7 +124,7 @@ export function App() {
           <select value={newOneOff.baseTier} onChange={(e) => setNewOneOff({ ...newOneOff, baseTier: e.target.value })}>{TIER_OPTIONS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}</select>
           <button type="submit">Add one-off</button></form>
         {boardMessage && <p>{boardMessage}</p>}
-        <ul>{todayTasks.map((task) => <li key={task.id}>[{task.status}] {task.template?.title ?? 'One-off task'} — {task.template?.attribute ?? 'Unmapped'} / {task.template?.baseTier ?? 'Paper'} (due {task.scheduledDate.slice(0, 10)})<button onClick={() => completeTask(task)}>Mark done</button><button onClick={() => cancelCadence(task)}>Cancel cadence</button><button onClick={() => deleteTaskTemplate(task)}>Delete task</button></li>)}</ul>
+        <ul>{todayTasks.map((task) => <li key={task.id} style={{ opacity: task.isDone ? 0.5 : 1 }}>[{task.status}] {task.template?.title ?? 'One-off task'} — {task.template?.attribute ?? 'Unmapped'} / {task.template?.baseTier ?? 'Paper'} (due {task.scheduledDate.slice(0, 10)})<button disabled={task.isDone} onClick={() => completeTask(task)}>{task.isDone ? 'Done' : 'Mark done'}</button><button onClick={() => cancelCadence(task)}>Cancel cadence</button><button onClick={() => deleteTaskTemplate(task)}>Delete task</button></li>)}</ul>
       </section>
 
       <section>

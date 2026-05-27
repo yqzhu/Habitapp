@@ -120,7 +120,7 @@ app.get('/api/today-board', async (req, res) => {
     const earliest = await prisma.taskInstance.findFirst({ where: { templateId: template.id }, orderBy: { scheduledDate: 'asc' } });
     const anchorDate = earliest ? atMidnight(earliest.scheduledDate) : boardDate;
     const existsOnDate = await prisma.taskInstance.findFirst({ where: { templateId: template.id, scheduledDate: boardDate } });
-    if (!existsOnDate && cadenceMatchesDate(template.cadenceRule, boardDate, anchorDate)) {
+    if (!existsOnDate && boardDate >= anchorDate && cadenceMatchesDate(template.cadenceRule, boardDate, anchorDate)) {
       await prisma.taskInstance.create({ data: { templateId: template.id, scheduledDate: boardDate, status: 'ACTIVE', mergedGroupKey: `template-${template.id}` } });
     }
   }
