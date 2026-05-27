@@ -1,0 +1,17 @@
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  color: #ecf0ff;
+  background: #0f1224;
+}
+
+body {
+  margin: 0;
+}
+
+.container {
+  max-width: 800px;
+  margin: 40px auto;
+  padding: 24px;
+  background: #181d39;
+  border-radius: 12px;
+}
