@@ -193,4 +193,80 @@ app.post('/api/cards/forge', async (req, res) => {
   }
 });
 
+app.get('/api/stats', async (_req, res) => {
+  const heroes = await prisma.hero.findMany({
+    where: { role: { in: ['HERO', 'BUDDY'] } },
+    include: { stats: { include: { attribute: true }, orderBy: { attribute: { label: 'asc' } } } },
+    orderBy: { id: 'asc' },
+  });
+
+  const payload = heroes.map((hero: { id: number; role: string; name: string; stats: { level: number; progressGold: number; attribute: { label: string } }[] }) => ({
+    id: hero.id,
+    role: hero.role,
+    name: hero.name,
+    stats: CANONICAL_ATTRIBUTES.map((attributeLabel) => {
+      const stat = hero.stats.find((s: { level: number; progressGold: number; attribute: { label: string } }) => s.attribute.label === attributeLabel);
+      const level = stat?.level ?? 0;
+      return {
+        attribute: attributeLabel,
+        level,
+        progressGold: stat?.progressGold ?? 0,
+        neededGold: 3 + level,
+      };
+    }),
+  }));
+
+  res.json({ characters: payload });
+});
+
+app.post('/api/stats/invest', async (req, res) => {
+  const { role, attribute } = req.body;
+  if (!['HERO', 'BUDDY'].includes(role)) return res.status(400).json({ error: 'role must be HERO or BUDDY' });
+  if (!CANONICAL_ATTRIBUTES.includes(attribute)) return res.status(400).json({ error: `attribute must be one of: ${CANONICAL_ATTRIBUTES.join(', ')}` });
+
+  try {
+    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const gold = await tx.cardsInventory.findUnique({ where: { attribute_tier: { attribute, tier: 'Gold' } } });
+      const goldCount = gold?.count ?? 0;
+      if (goldCount < 1) {
+        throw new Error(`Not enough Gold cards for ${attribute}. Current count: ${goldCount}`);
+      }
+
+      const hero = await tx.hero.findUnique({ where: { role } });
+      if (!hero) throw new Error(`${role} character not found`);
+      const dbAttribute = await tx.attribute.findFirst({ where: { label: attribute } });
+      if (!dbAttribute) throw new Error(`Attribute '${attribute}' not found`);
+
+      const current = await tx.heroStat.upsert({
+        where: { heroId_attributeId: { heroId: hero.id, attributeId: dbAttribute.id } },
+        create: { heroId: hero.id, attributeId: dbAttribute.id, level: 0, progressGold: 0 },
+        update: {},
+      });
+
+      let level = current.level;
+      let progressGold = current.progressGold + 1;
+      while (progressGold >= 3 + level) {
+        progressGold -= 3 + level;
+        level += 1;
+      }
+
+      const updated = await tx.heroStat.update({ where: { id: current.id }, data: { level, progressGold } });
+      await tx.cardsInventory.update({ where: { attribute_tier: { attribute, tier: 'Gold' } }, data: { count: { decrement: 1 } } });
+
+      return {
+        role: hero.role,
+        characterName: hero.name,
+        attribute,
+        level: updated.level,
+        progressGold: updated.progressGold,
+        neededGold: 3 + updated.level,
+      };
+    });
+
+    res.json({ success: true, result });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to invest Gold card' });
+  }
+});
+
 app.listen(port, () => console.log(`Hero Habit Forge backend listening on http://localhost:${port}`));

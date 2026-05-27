@@ -3,6 +3,8 @@ import { FormEvent, useEffect, useState } from 'react';
 type TaskTemplate = { id: number; title: string; cadenceRule: string; attribute: string; baseTier: string; isActive: boolean };
 type TodayTask = { id: number; status: 'ACTIVE' | 'DONE'; scheduledDate: string; template: TaskTemplate | null; isDone?: boolean };
 type InventoryGroup = { attribute: string; tiers: { tier: string; count: number }[] };
+type CharacterStat = { attribute: string; level: number; progressGold: number; neededGold: number };
+type Character = { id: number; role: 'HERO' | 'BUDDY'; name: string; stats: CharacterStat[] };
 
 const API_BASE = 'http://localhost:3001';
 const ATTRIBUTE_OPTIONS = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Farming', 'Wealth', 'Survival'];
@@ -26,12 +28,15 @@ export function App() {
   const [forgeMessage, setForgeMessage] = useState('');
   const [newTemplate, setNewTemplate] = useState({ title: '', cadenceRule: 'daily', attribute: 'Physique', baseTier: 'Paper' });
   const [newOneOff, setNewOneOff] = useState({ title: '', attribute: 'Wisdom', baseTier: 'Paper' });
+  const [characters, setCharacters] = useState<Character[]>([]);
+  const [statsMessage, setStatsMessage] = useState('');
 
   const loadData = async (date = selectedDate) => {
-    const [templatesRes, todayRes, inventoryRes] = await Promise.all([
+    const [templatesRes, todayRes, inventoryRes, statsRes] = await Promise.all([
       fetch(`${API_BASE}/api/task-templates`),
       fetch(`${API_BASE}/api/today-board?date=${date}`),
       fetch(`${API_BASE}/api/cards/inventory`),
+      fetch(`${API_BASE}/api/stats`),
     ]);
 
     setTemplates(await templatesRes.json());
@@ -39,6 +44,8 @@ export function App() {
     setTodayTasks((boardData.tasks ?? []).map((t: TodayTask) => ({ ...t, isDone: false })));
     const inventoryData = await inventoryRes.json();
     setInventory(inventoryData.inventory ?? []);
+    const statsData = await statsRes.json();
+    setCharacters(statsData.characters ?? []);
   };
 
   useEffect(() => { loadData(todayIso); }, []);
@@ -88,9 +95,22 @@ export function App() {
     await loadData();
   };
 
+  const investGold = async (role: 'HERO' | 'BUDDY', attribute: string) => {
+    setStatsMessage('');
+    const res = await fetch(`${API_BASE}/api/stats/invest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role, attribute }),
+    });
+    const data = await res.json();
+    if (!res.ok) return setStatsMessage(data.error ?? 'Failed to invest Gold card');
+    setStatsMessage(`${data.result.characterName} invested 1 ${attribute} Gold card. New level ${data.result.level}, progress ${data.result.progressGold}/${data.result.neededGold}.`);
+    await loadData();
+  };
+
   return (
     <main className="container">
-      <h1>Hero Habit Forge — Phase 4</h1>
+      <h1>Hero Habit Forge — Phase 5</h1>
 
       <section><h2>Task Templates</h2>
         <form onSubmit={createTemplate}><input placeholder="Title" value={newTemplate.title} onChange={(e) => setNewTemplate({ ...newTemplate, title: e.target.value })} required />
@@ -127,6 +147,32 @@ export function App() {
         <form onSubmit={forgeCards}><select value={forgeAttribute} onChange={(e) => setForgeAttribute(e.target.value)}>{ATTRIBUTE_OPTIONS.map((attribute) => <option key={attribute} value={attribute}>{attribute}</option>)}</select>
           <select value={forgeTier} onChange={(e) => setForgeTier(e.target.value)}>{TIER_OPTIONS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}</select><button type="submit">Merge 3 → 1</button></form>
         {forgeMessage && <p>{forgeMessage}</p>}
+      </section>
+
+      <section>
+        <h2>Hero/Buddy Stats</h2>
+        {statsMessage && <p>{statsMessage}</p>}
+        <div>
+          {characters.map((character) => (
+            <article key={character.id}>
+              <h3>{character.name}</h3>
+              <ul>
+                {character.stats.map((stat) => {
+                  const pct = stat.neededGold > 0 ? Math.floor((stat.progressGold / stat.neededGold) * 100) : 0;
+                  return (
+                    <li key={`${character.id}-${stat.attribute}`}>
+                      <strong>{stat.attribute}</strong>: level {stat.level} — {stat.progressGold}/{stat.neededGold}
+                      <div style={{ width: '220px', border: '1px solid #999', margin: '4px 0', height: '12px' }}>
+                        <div style={{ width: `${pct}%`, background: '#d4af37', height: '100%' }} />
+                      </div>
+                      <button onClick={() => investGold(character.role, stat.attribute)}>Invest 1 Gold</button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </article>
+          ))}
+        </div>
       </section>
     </main>
   );
