@@ -69,6 +69,12 @@ export function App() {
     await fetch(`${API_BASE}/api/task-templates/${task.template.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...task.template, isActive: false }),
     });
+    const data = await res.json();
+    if (!res.ok) {
+      setBoardMessage(data.error ?? 'Failed to complete task');
+      return;
+    }
+    setBoardMessage(`Completed ${task.template?.title ?? 'task'} and received ${data.awardedCard.attribute}/${data.awardedCard.tier} card.`);
     await loadData();
   };
 
