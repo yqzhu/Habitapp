@@ -25,10 +25,6 @@ async function main() {
     }
   }
 
-  await prisma.cardsInventory.update({ where: { attribute_tier: { attribute: 'Physique', tier: 'Paper' } }, data: { count: 6 } });
-  await prisma.cardsInventory.update({ where: { attribute_tier: { attribute: 'Sociability', tier: 'Paper' } }, data: { count: 6 } });
-  await prisma.cardsInventory.update({ where: { attribute_tier: { attribute: 'Wisdom', tier: 'Paper' } }, data: { count: 4 } });
-
   const chapter1Requirements = {
     unlock: { minAnyStatLevel: 0 },
     recommended: ['Wisdom 1', 'Physique 1 or Sociability 1'],

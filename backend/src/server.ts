@@ -298,13 +298,13 @@ function scoreOutcome(stats: Record<string, number>, checks: { attribute: string
 app.get('/api/adventures', async (_req, res) => {
   const adventures = await prisma.adventure.findMany({ orderBy: { chapter: 'asc' } });
   const progress = await prisma.adventureProgress.findMany();
-  const byId = new Map(progress.map((p) => [p.adventureId, p]));
-  const payload = adventures.map((a) => ({
+  const byId = new Map(progress.map((p: { adventureId: number; status: string }) => [p.adventureId, p]));
+  const payload = adventures.map((a: { id: number; chapter: number; title: string; difficulty: number }) => ({
     id: a.id,
     chapter: a.chapter,
     title: a.title,
     difficulty: a.difficulty,
-    status: byId.get(a.id)?.status ?? (a.chapter === 1 ? 'UNLOCKED' : 'LOCKED'),
+    status: (byId.get(a.id) as { status: string } | undefined)?.status ?? (a.chapter === 1 ? 'UNLOCKED' : 'LOCKED'),
   }));
   res.json({ adventures: payload });
 });
@@ -324,7 +324,7 @@ app.get('/api/adventures/:id', async (req, res) => {
     requirements: JSON.parse(adventure.requirementsJson),
     branches: JSON.parse(adventure.branchesJson),
     status: progress?.status ?? (adventure.chapter === 1 ? 'UNLOCKED' : 'LOCKED'),
-    hints: hints.map((h) => ({ id: h.id, hintType: h.hintType, price: JSON.parse(h.priceJson) })),
+    hints: hints.map((h: { id: number; hintType: string; priceJson: string }) => ({ id: h.id, hintType: h.hintType, price: JSON.parse(h.priceJson) })),
   });
 });
 
@@ -370,13 +370,13 @@ app.post('/api/adventures/:id/hints/:hintId/purchase', async (req, res) => {
   if (!hint || hint.adventureId !== id) return res.status(404).json({ error: 'Hint not found for this chapter' });
   const price = JSON.parse(hint.priceJson) as { attribute: string; tier: string; count: number };
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const entry = await tx.cardsInventory.findUnique({ where: { attribute_tier: { attribute: price.attribute, tier: price.tier } } });
     const current = entry?.count ?? 0;
     if (current < price.count) throw new Error(`Need ${price.count} ${price.attribute}/${price.tier} cards, but only ${current} available.`);
     await tx.cardsInventory.update({ where: { attribute_tier: { attribute: price.attribute, tier: price.tier } }, data: { count: { decrement: price.count } } });
     return { remaining: current - price.count };
-  }).catch((error) => ({ error: error instanceof Error ? error.message : 'Could not buy hint' }));
+  }).catch((error: unknown) => ({ error: error instanceof Error ? error.message : 'Could not buy hint' }));
 
   if ('error' in result) return res.status(400).json({ error: result.error });
   res.json({ success: true, hint: { hintType: hint.hintType, text: hint.scope }, cost: price, remaining: result.remaining });
