@@ -281,21 +281,33 @@ async function getAttributeLevels(): Promise<Record<string, number>> {
   return levels;
 }
 
-function scoreOutcome(stats: Record<string, number>, checks: { attribute: string; min: number; weight: number }[]) {
+function scoreOutcome(stats: Record<string, number>, checks: { attribute: string; min: number; weight: number }[], bonus = 0) {
   const gateFailed = checks.find((check) => (stats[check.attribute] ?? 0) < check.min);
   if (gateFailed) return { allowed: false, outcome: 'fail', reason: `Requires ${gateFailed.attribute} level ${gateFailed.min}` };
 
   const weightedPower = checks.reduce((sum, check) => sum + (stats[check.attribute] ?? 0) * check.weight, 0);
   const roll = Math.random();
-  const successCutoff = Math.min(0.9, 0.35 + weightedPower * 0.08);
-  const partialCutoff = Math.min(0.97, successCutoff + 0.35);
+  const successCutoff = Math.min(0.95, 0.35 + weightedPower * 0.08 + bonus);
+  const partialCutoff = Math.min(0.98, successCutoff + 0.35);
 
-  if (roll <= successCutoff) return { allowed: true, outcome: 'success', reason: `Great execution (${(successCutoff * 100).toFixed(0)}% success chance).` };
+  if (roll <= successCutoff) return { allowed: true, outcome: 'success', reason: `Great execution (${(successCutoff * 100).toFixed(0)}% success chance including hint bonuses).` };
   if (roll <= partialCutoff) return { allowed: true, outcome: 'partial', reason: 'You made progress, but not a clean finish.' };
   return { allowed: true, outcome: 'fail', reason: 'The attempt slipped this time.' };
 }
 
-app.get('/api/adventures', async (_req, res) => {
+async function getAdventureState(adventureId: number) {
+  const runs = await prisma.adventureRun.findMany({ where: { adventureId }, orderBy: { playedAt: 'asc' } });
+  let milestone = 1;
+  const hintBonusByMilestone: Record<number, number> = {};
+  for (const run of runs) {
+    const result = JSON.parse(run.resultJson) as { kind?: string; outcome?: string; milestone?: number; bonus?: number };
+    if (result.kind === 'hint' && result.milestone) hintBonusByMilestone[result.milestone] = (hintBonusByMilestone[result.milestone] ?? 0) + (result.bonus ?? 0);
+    if (result.kind === 'attempt' && (result.outcome === 'success' || result.outcome === 'partial')) milestone = Math.max(milestone, (result.milestone ?? milestone) + 1);
+  }
+  return { milestone: Math.min(5, milestone), hintBonusByMilestone };
+}
+
+app.get('/api/adventures' , async (_req, res) => {
   const adventures = await prisma.adventure.findMany({ orderBy: { chapter: 'asc' } });
   const progress = await prisma.adventureProgress.findMany();
   const byId = new Map(progress.map((p: { adventureId: number; status: string }) => [p.adventureId, p]));
@@ -316,15 +328,20 @@ app.get('/api/adventures/:id', async (req, res) => {
   if (!adventure) return res.status(404).json({ error: 'Adventure not found' });
   const progress = await prisma.adventureProgress.findUnique({ where: { adventureId: id } });
   const hints = await prisma.hintStore.findMany({ where: { adventureId: id }, orderBy: { id: 'asc' } });
+  const state = await getAdventureState(id);
+  const branches = JSON.parse(adventure.branchesJson);
+  const currentMilestone = (branches.milestones ?? []).find((m: { index: number }) => m.index === state.milestone) ?? null;
   res.json({
     id: adventure.id,
     chapter: adventure.chapter,
     title: adventure.title,
     difficulty: adventure.difficulty,
     requirements: JSON.parse(adventure.requirementsJson),
-    branches: JSON.parse(adventure.branchesJson),
+    branches,
+    currentMilestone: state.milestone,
+    currentMilestoneData: currentMilestone,
     status: progress?.status ?? (adventure.chapter === 1 ? 'UNLOCKED' : 'LOCKED'),
-    hints: hints.map((h: { id: number; hintType: string; priceJson: string }) => ({ id: h.id, hintType: h.hintType, price: JSON.parse(h.priceJson) })),
+    hints: hints.map((h: { id: number; hintType: string; priceJson: string; scope: string }) => ({ id: h.id, hintType: h.hintType, price: JSON.parse(h.priceJson), text: h.scope })),
   });
 });
 
@@ -336,30 +353,30 @@ app.post('/api/adventures/:id/attempt', async (req, res) => {
   const adventure = await prisma.adventure.findUnique({ where: { id } });
   if (!adventure) return res.status(404).json({ error: 'Adventure not found' });
   const branches = JSON.parse(adventure.branchesJson);
-  const choice = (branches.choices ?? []).find((c: { id: string }) => c.id === choiceId);
-  if (!choice) return res.status(400).json({ error: 'Choice not found for this chapter' });
+  const state = await getAdventureState(id);
+  const milestoneData = (branches.milestones ?? []).find((m: { index: number }) => m.index === state.milestone);
+  if (!milestoneData) return res.status(400).json({ error: 'This chapter is already fully completed.' });
+  const choice = (milestoneData.choices ?? []).find((c: { id: string }) => c.id === choiceId);
+  if (!choice) return res.status(400).json({ error: `Choice not found for milestone ${state.milestone}` });
 
   const stats = await getAttributeLevels();
-  const scored = scoreOutcome(stats, choice.checks ?? []);
+  const scored = scoreOutcome(stats, choice.checks ?? [], state.hintBonusByMilestone[state.milestone] ?? 0);
   if (!scored.allowed) return res.status(400).json({ error: `Cannot attempt: ${scored.reason}` });
 
   const narrative = choice.outcomes?.[scored.outcome] ?? 'Outcome resolved.';
-  await prisma.adventureRun.create({ data: { adventureId: id, resultJson: JSON.stringify({ choiceId, outcome: scored.outcome, narrative }) } });
+  await prisma.adventureRun.create({ data: { adventureId: id, resultJson: JSON.stringify({ kind: 'attempt', milestone: state.milestone, choiceId, outcome: scored.outcome, narrative }) } });
+
+  const advanced = scored.outcome === 'success' || scored.outcome === 'partial';
+  const nextMilestone = advanced ? Math.min(6, state.milestone + 1) : state.milestone;
+  const chapterDone = nextMilestone > 5;
 
   await prisma.adventureProgress.upsert({
     where: { adventureId: id },
-    update: { status: scored.outcome === 'success' ? 'COMPLETED' : 'UNLOCKED', bestOutcome: scored.outcome },
-    create: { adventureId: id, status: scored.outcome === 'success' ? 'COMPLETED' : 'UNLOCKED', bestOutcome: scored.outcome },
+    update: { status: chapterDone ? 'COMPLETED' : 'UNLOCKED', bestOutcome: scored.outcome },
+    create: { adventureId: id, status: chapterDone ? 'COMPLETED' : 'UNLOCKED', bestOutcome: scored.outcome },
   });
 
-  if (scored.outcome === 'success') {
-    const next = await prisma.adventure.findFirst({ where: { chapter: adventure.chapter + 1 } });
-    if (next) {
-      await prisma.adventureProgress.upsert({ where: { adventureId: next.id }, update: { status: 'UNLOCKED' }, create: { adventureId: next.id, status: 'UNLOCKED' } });
-    }
-  }
-
-  res.json({ success: true, outcome: scored.outcome, explanation: scored.reason, narrative });
+  res.json({ success: true, outcome: scored.outcome, explanation: scored.reason, narrative, milestone: state.milestone, nextMilestone: chapterDone ? 5 : nextMilestone, chapterCompleted: chapterDone, reveal: chapterDone ? branches.finalReveal : null });
 });
 
 app.post('/api/adventures/:id/hints/:hintId/purchase', async (req, res) => {
@@ -368,7 +385,10 @@ app.post('/api/adventures/:id/hints/:hintId/purchase', async (req, res) => {
   if (Number.isNaN(id) || Number.isNaN(hintId)) return res.status(400).json({ error: 'Invalid ids' });
   const hint = await prisma.hintStore.findUnique({ where: { id: hintId } });
   if (!hint || hint.adventureId !== id) return res.status(404).json({ error: 'Hint not found for this chapter' });
-  const price = JSON.parse(hint.priceJson) as { attribute: string; tier: string; count: number };
+  const price = JSON.parse(hint.priceJson) as { attribute: string; tier: string; count: number; milestone?: number; bonus?: number };
+  const state = await getAdventureState(id);
+  const milestone = price.milestone ?? state.milestone;
+  if (milestone !== state.milestone) return res.status(400).json({ error: `This hint is for milestone ${milestone}, but you are on milestone ${state.milestone}.` });
 
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const entry = await tx.cardsInventory.findUnique({ where: { attribute_tier: { attribute: price.attribute, tier: price.tier } } });
@@ -379,7 +399,9 @@ app.post('/api/adventures/:id/hints/:hintId/purchase', async (req, res) => {
   }).catch((error: unknown) => ({ error: error instanceof Error ? error.message : 'Could not buy hint' }));
 
   if ('error' in result) return res.status(400).json({ error: result.error });
-  res.json({ success: true, hint: { hintType: hint.hintType, text: hint.scope }, cost: price, remaining: result.remaining });
+  await prisma.adventureRun.create({ data: { adventureId: id, resultJson: JSON.stringify({ kind: 'hint', milestone, bonus: price.bonus ?? 0, hintId }) } });
+  const nextState = await getAdventureState(id);
+  res.json({ success: true, hint: { hintType: hint.hintType, text: hint.scope }, cost: price, remaining: result.remaining, totalMilestoneBonus: nextState.hintBonusByMilestone[milestone] ?? 0 });
 });
 
 app.listen(port, () => console.log(`Hero Habit Forge backend listening on http://localhost:${port}`));

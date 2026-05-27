@@ -6,7 +6,7 @@ type InventoryGroup = { attribute: string; tiers: { tier: string; count: number 
 type CharacterStat = { attribute: string; level: number; progressGold: number; neededGold: number };
 type Character = { id: number; role: 'HERO' | 'BUDDY'; name: string; stats: CharacterStat[] };
 type AdventureListItem = { id: number; chapter: number; title: string; difficulty: number; status: string };
-type AdventureDetail = { id: number; chapter: number; title: string; status: string; branches: { intro: string; choices: { id: string; label: string }[] }; hints: { id: number; hintType: string; price: { attribute: string; tier: string; count: number } }[] };
+type AdventureDetail = { id: number; chapter: number; title: string; status: string; currentMilestone: number; branches: { intro: string; finalReveal?: string }; currentMilestoneData: { index: number; title: string; narrative: string; choices: { id: string; label: string }[] } | null; hints: { id: number; hintType: string; text: string; price: { attribute: string; tier: string; count: number; milestone?: number; bonus?: number } }[] };
 
 const API_BASE = 'http://localhost:3001';
 const ATTRIBUTE_OPTIONS = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Farming', 'Wealth', 'Survival'];
@@ -113,7 +113,7 @@ export function App() {
       body: JSON.stringify({ choiceId }),
     });
     const data = await res.json();
-    setAdventureMessage(res.ok ? `${data.outcome.toUpperCase()}: ${data.narrative} ${data.explanation}` : (data.error ?? 'Attempt failed'));
+    setAdventureMessage(res.ok ? `${data.outcome.toUpperCase()} (Milestone ${data.milestone}): ${data.narrative} ${data.explanation}${data.chapterCompleted ? ` ${data.reveal}` : ''}` : (data.error ?? 'Attempt failed'));
     await loadData();
     await openAdventure(selectedAdventure.id, false);
   };
@@ -122,7 +122,7 @@ export function App() {
     if (!selectedAdventure) return;
     const res = await fetch(`${API_BASE}/api/adventures/${selectedAdventure.id}/hints/${hintId}/purchase`, { method: 'POST' });
     const data = await res.json();
-    setAdventureMessage(res.ok ? `${data.hint.hintType.toUpperCase()} hint: ${data.hint.text}` : (data.error ?? 'Hint purchase failed'));
+    setAdventureMessage(res.ok ? `${data.hint.hintType.toUpperCase()} hint: ${data.hint.text} (milestone bonus now +${Math.round((data.totalMilestoneBonus ?? 0) * 100)}%)` : (data.error ?? 'Hint purchase failed'));
     await loadData();
   };
 
@@ -220,8 +220,10 @@ export function App() {
           <article>
             <h3>{selectedAdventure.title}</h3>
             <p>{selectedAdventure.branches.intro}</p>
+            <p><strong>Current milestone {selectedAdventure.currentMilestone}:</strong> {selectedAdventure.currentMilestoneData?.title ?? 'Completed'}</p>
+            <p>{selectedAdventure.currentMilestoneData?.narrative ?? selectedAdventure.branches.finalReveal}</p>
             <ul>
-              {selectedAdventure.branches.choices.map((choice) => (
+              {(selectedAdventure.currentMilestoneData?.choices ?? []).map((choice) => (
                 <li key={choice.id}><button onClick={() => attemptChoice(choice.id)}>{choice.label}</button></li>
               ))}
             </ul>
@@ -229,7 +231,7 @@ export function App() {
             <ul>
               {selectedAdventure.hints.map((hint) => (
                 <li key={hint.id}>
-                  {hint.hintType} ({hint.price.count} {hint.price.attribute}/{hint.price.tier})
+                  {hint.hintType} (M{hint.price.milestone ?? '?'} | {hint.price.count} {hint.price.attribute}/{hint.price.tier} | +{Math.round((hint.price.bonus ?? 0) * 100)}%)
                   <button onClick={() => buyHint(hint.id)}>Buy</button>
                 </li>
               ))}
