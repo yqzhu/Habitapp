@@ -5,6 +5,8 @@ type TodayTask = { id: number; status: 'ACTIVE' | 'DONE'; scheduledDate: string;
 type InventoryGroup = { attribute: string; tiers: { tier: string; count: number }[] };
 type CharacterStat = { attribute: string; level: number; progressGold: number; neededGold: number };
 type Character = { id: number; role: 'HERO' | 'BUDDY'; name: string; stats: CharacterStat[] };
+type AdventureListItem = { id: number; chapter: number; title: string; difficulty: number; status: string };
+type AdventureDetail = { id: number; chapter: number; title: string; status: string; currentMilestone: number; chapterCompleted?: boolean; branches: { intro: string; finalReveal?: string }; currentMilestoneData: { index: number; title: string; narrative: string; choices: { id: string; label: string }[] } | null; hints: { id: number; hintType: string; text: string; price: { attribute: string; tier: string; count: number; milestone?: number; bonus?: number } }[] };
 
 const API_BASE = 'http://localhost:3001';
 const ATTRIBUTE_OPTIONS = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Farming', 'Wealth', 'Survival'];
@@ -30,13 +32,17 @@ export function App() {
   const [newOneOff, setNewOneOff] = useState({ title: '', attribute: 'Wisdom', baseTier: 'Paper' });
   const [characters, setCharacters] = useState<Character[]>([]);
   const [statsMessage, setStatsMessage] = useState('');
+  const [adventures, setAdventures] = useState<AdventureListItem[]>([]);
+  const [selectedAdventure, setSelectedAdventure] = useState<AdventureDetail | null>(null);
+  const [adventureMessage, setAdventureMessage] = useState('');
 
   const loadData = async (date = selectedDate) => {
-    const [templatesRes, todayRes, inventoryRes, statsRes] = await Promise.all([
+    const [templatesRes, todayRes, inventoryRes, statsRes, adventuresRes] = await Promise.all([
       fetch(`${API_BASE}/api/task-templates`),
       fetch(`${API_BASE}/api/today-board?date=${date}`),
       fetch(`${API_BASE}/api/cards/inventory`),
       fetch(`${API_BASE}/api/stats`),
+      fetch(`${API_BASE}/api/adventures`),
     ]);
 
     setTemplates(await templatesRes.json());
@@ -46,6 +52,8 @@ export function App() {
     setInventory(inventoryData.inventory ?? []);
     const statsData = await statsRes.json();
     setCharacters(statsData.characters ?? []);
+    const adventuresData = await adventuresRes.json();
+    setAdventures(adventuresData.adventures ?? []);
   };
 
   useEffect(() => { loadData(todayIso); }, []);
@@ -95,6 +103,37 @@ export function App() {
     await loadData();
   };
 
+
+
+  const openAdventure = async (id: number, clearMessage = true) => {
+    const res = await fetch(`${API_BASE}/api/adventures/${id}`);
+    const data = await res.json();
+    if (!res.ok) return setAdventureMessage(data.error ?? 'Could not load chapter');
+    setSelectedAdventure(data);
+    if (clearMessage) setAdventureMessage('');
+  };
+
+  const attemptChoice = async (choiceId: string) => {
+    if (!selectedAdventure) return;
+    const res = await fetch(`${API_BASE}/api/adventures/${selectedAdventure.id}/attempt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ choiceId }),
+    });
+    const data = await res.json();
+    setAdventureMessage(res.ok ? `${data.outcome.toUpperCase()} (Milestone ${data.milestone}): ${data.narrative} ${data.explanation}${data.chapterCompleted ? ` ${data.reveal}` : ''}` : (data.error ?? 'Attempt failed'));
+    await loadData();
+    await openAdventure(selectedAdventure.id, false);
+  };
+
+  const buyHint = async (hintId: number) => {
+    if (!selectedAdventure) return;
+    const res = await fetch(`${API_BASE}/api/adventures/${selectedAdventure.id}/hints/${hintId}/purchase`, { method: 'POST' });
+    const data = await res.json();
+    setAdventureMessage(res.ok ? `${data.hint.hintType.toUpperCase()} hint: ${data.hint.text} (milestone bonus now +${Math.round((data.totalMilestoneBonus ?? 0) * 100)}%)` : (data.error ?? 'Hint purchase failed'));
+    await loadData();
+  };
+
   const investGold = async (role: 'HERO' | 'BUDDY', attribute: string) => {
     setStatsMessage('');
     const res = await fetch(`${API_BASE}/api/stats/invest`, {
@@ -110,7 +149,7 @@ export function App() {
 
   return (
     <main className="container">
-      <h1>Hero Habit Forge — Phase 5</h1>
+      <h1>Hero Habit Forge — Phase 6</h1>
 
       <section><h2>Task Templates</h2>
         <form onSubmit={createTemplate}><input placeholder="Title" value={newTemplate.title} onChange={(e) => setNewTemplate({ ...newTemplate, title: e.target.value })} required />
@@ -174,6 +213,43 @@ export function App() {
           ))}
         </div>
       </section>
+
+      <section>
+        <h2>Adventure</h2>
+        <ul>
+          {adventures.map((adventure) => (
+            <li key={adventure.id}>
+              Chapter {adventure.chapter}: {adventure.title} [{adventure.status}]
+              <button disabled={adventure.status === 'LOCKED'} onClick={() => openAdventure(adventure.id)}>Open</button>
+            </li>
+          ))}
+        </ul>
+        {selectedAdventure && (
+          <article>
+            <h3>{selectedAdventure.title}</h3>
+            <p>{selectedAdventure.branches.intro}</p>
+            <p><strong>Current milestone {selectedAdventure.currentMilestone}:</strong> {selectedAdventure.currentMilestoneData?.title ?? 'Completed'}</p>
+            <p>{selectedAdventure.currentMilestoneData?.narrative ?? selectedAdventure.branches.finalReveal}</p>
+            <ul>
+              {(selectedAdventure.currentMilestoneData?.choices ?? []).map((choice) => (
+                <li key={choice.id}><button disabled={selectedAdventure.chapterCompleted} onClick={() => attemptChoice(choice.id)}>{choice.label}</button></li>
+              ))}
+            </ul>
+            <h4>Hints</h4>
+            <p>Each hint adds to your success chance on its milestone. Example: +5% means success chance increases by 5 percentage points. Hint bonuses stack additively, and you need zero fixed hints — buy as many as you want for better odds.</p>
+            <ul>
+              {selectedAdventure.hints.map((hint) => (
+                <li key={hint.id}>
+                  {hint.hintType} (M{hint.price.milestone ?? '?'} | {hint.price.count} {hint.price.attribute}/{hint.price.tier} | +{Math.round((hint.price.bonus ?? 0) * 100)}%)
+                  <button onClick={() => buyHint(hint.id)}>Buy</button>
+                </li>
+              ))}
+            </ul>
+          </article>
+        )}
+        {adventureMessage && <p>{adventureMessage}</p>}
+      </section>
+
     </main>
   );
 }
