@@ -3,9 +3,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 const attributes = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Farming', 'Wealth', 'Survival'];
-const tiers = ['Paper', 'Rock', 'Bronze', 'Silver', 'Gold'];
-
-const tiers = ['Paper', 'Rock', 'Bronze', 'Silver', 'Gold'];
+const CARD_TIERS = ['Paper', 'Rock', 'Bronze', 'Silver', 'Gold'];
 
 async function main() {
   await prisma.hero.upsert({ where: { role: 'HERO' }, update: {}, create: { name: 'Hero', role: 'HERO' } });
@@ -13,7 +11,7 @@ async function main() {
 
   for (const label of attributes) {
     await prisma.attribute.upsert({ where: { key: label.toLowerCase() }, update: { label }, create: { key: label.toLowerCase(), label } });
-    for (const tier of tiers) {
+    for (const tier of CARD_TIERS) {
       await prisma.cardsInventory.upsert({ where: { attribute_tier: { attribute: label, tier } }, update: {}, create: { attribute: label, tier, count: 0 } });
     }
   }
