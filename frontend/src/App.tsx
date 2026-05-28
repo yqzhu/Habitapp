@@ -11,12 +11,7 @@ type AdventureDetail = { id: number; chapter: number; title: string; status: str
 const API_BASE = 'http://localhost:3001';
 const ATTRIBUTE_OPTIONS = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Farming', 'Wealth', 'Survival'];
 const TIER_OPTIONS = ['Paper', 'Rock', 'Bronze', 'Silver', 'Gold'];
-const formatLocalDate = (date: Date) => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-};
+const formatLocalDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const todayIso = formatLocalDate(new Date());
 
 export function App() {
@@ -44,7 +39,6 @@ export function App() {
       fetch(`${API_BASE}/api/stats`),
       fetch(`${API_BASE}/api/adventures`),
     ]);
-
     setTemplates(await templatesRes.json());
     const boardData = await todayRes.json();
     setTodayTasks((boardData.tasks ?? []).map((t: TodayTask) => ({ ...t, isDone: false })));
@@ -57,9 +51,7 @@ export function App() {
   };
 
   useEffect(() => { loadData(todayIso); }, []);
-
   const createTemplate = async (event: FormEvent) => { event.preventDefault(); await fetch(`${API_BASE}/api/task-templates`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newTemplate, startDate: selectedDate }) }); setNewTemplate({ title: '', cadenceRule: 'daily', attribute: 'Physique', baseTier: 'Paper' }); await loadData(); };
-  const toggleTemplate = async (template: TaskTemplate) => { await fetch(`${API_BASE}/api/task-templates/${template.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...template, isActive: !template.isActive }) }); await loadData(); };
   const createOneOff = async (event: FormEvent) => { event.preventDefault(); await fetch(`${API_BASE}/api/today-board/one-off`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newOneOff, date: selectedDate }) }); setNewOneOff({ title: '', attribute: 'Wisdom', baseTier: 'Paper' }); await loadData(); };
 
   const completeTask = async (task: TodayTask) => {
