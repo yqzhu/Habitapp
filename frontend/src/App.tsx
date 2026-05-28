@@ -6,7 +6,7 @@ type InventoryGroup = { attribute: string; tiers: { tier: string; count: number 
 type CharacterStat = { attribute: string; level: number; progressGold: number; neededGold: number };
 type Character = { id: number; role: 'HERO' | 'BUDDY'; name: string; stats: CharacterStat[] };
 type AdventureListItem = { id: number; chapter: number; title: string; difficulty: number; status: string };
-type AdventureDetail = { id: number; chapter: number; title: string; status: string; currentMilestone: number; branches: { intro: string; finalReveal?: string }; currentMilestoneData: { index: number; title: string; narrative: string; choices: { id: string; label: string }[] } | null; hints: { id: number; hintType: string; text: string; price: { attribute: string; tier: string; count: number; milestone?: number; bonus?: number } }[] };
+type AdventureDetail = { id: number; chapter: number; title: string; status: string; currentMilestone: number; chapterCompleted?: boolean; branches: { intro: string; finalReveal?: string }; currentMilestoneData: { index: number; title: string; narrative: string; choices: { id: string; label: string }[] } | null; hints: { id: number; hintType: string; text: string; price: { attribute: string; tier: string; count: number; milestone?: number; bonus?: number } }[] };
 
 const API_BASE = 'http://localhost:3001';
 const ATTRIBUTE_OPTIONS = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Farming', 'Wealth', 'Survival'];
@@ -224,10 +224,11 @@ export function App() {
             <p>{selectedAdventure.currentMilestoneData?.narrative ?? selectedAdventure.branches.finalReveal}</p>
             <ul>
               {(selectedAdventure.currentMilestoneData?.choices ?? []).map((choice) => (
-                <li key={choice.id}><button onClick={() => attemptChoice(choice.id)}>{choice.label}</button></li>
+                <li key={choice.id}><button disabled={selectedAdventure.chapterCompleted} onClick={() => attemptChoice(choice.id)}>{choice.label}</button></li>
               ))}
             </ul>
             <h4>Hints</h4>
+            <p>Each hint adds to your success chance on its milestone. Example: +5% means success chance increases by 5 percentage points. Hint bonuses stack additively, and you need zero fixed hints — buy as many as you want for better odds.</p>
             <ul>
               {selectedAdventure.hints.map((hint) => (
                 <li key={hint.id}>
