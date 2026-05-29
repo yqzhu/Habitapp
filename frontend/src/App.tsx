@@ -2,6 +2,15 @@ import { FormEvent, useEffect, useState } from 'react';
 
 const heroImageUrl = new URL('../../cards/Hero_updated.png', import.meta.url).href;
 const buddyImageUrl = new URL('../../cards/Buddy_updated.png', import.meta.url).href;
+type GlobbedCardImages = ImportMeta & {
+  glob: (pattern: string, options: { eager: true; query: string; import: string }) => Record<string, string>;
+};
+
+const cardImageModules = (import.meta as GlobbedCardImages).glob('../../cards/*.png', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+});
 
 type TaskTemplate = { id: number; title: string; cadenceRule: string; attribute: string; baseTier: string; isActive: boolean };
 type TodayTask = { id: number; status: 'ACTIVE' | 'DONE'; scheduledDate: string; template: TaskTemplate | null; isDone?: boolean };
@@ -18,6 +27,10 @@ const TIER_OPTIONS = ['Paper', 'Rock', 'Bronze', 'Silver', 'Gold'];
 const formatLocalDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const todayIso = formatLocalDate(new Date());
 const tierClassName = (tier: string) => `tier-${tier.toLowerCase()}`;
+const getCardImageUrl = (attribute: string, tier: string) => {
+  const normalizedTier = tier.toLowerCase();
+  return cardImageModules[`../../cards/${attribute}_${normalizedTier}.png`] ?? '';
+};
 const TABS: { id: AppTab; label: string }[] = [
   { id: 'templates', label: 'Templates' },
   { id: 'today', label: 'Today Board' },
@@ -32,8 +45,6 @@ export function App() {
   const [inventory, setInventory] = useState<InventoryGroup[]>([]);
   const [selectedDate, setSelectedDate] = useState(todayIso);
   const [boardMessage, setBoardMessage] = useState('');
-  const [forgeAttribute, setForgeAttribute] = useState('Physique');
-  const [forgeTier, setForgeTier] = useState('Paper');
   const [forgeMessage, setForgeMessage] = useState('');
   const [newTemplate, setNewTemplate] = useState({ title: '', cadenceRule: 'daily', attribute: 'Physique', baseTier: 'Paper' });
   const [newOneOff, setNewOneOff] = useState({ title: '', attribute: 'Wisdom', baseTier: 'Paper' });
@@ -116,15 +127,17 @@ export function App() {
     await loadData();
   };
 
-  const forgeCards = async (event: FormEvent) => {
-    event.preventDefault();
+  const forgeCards = async (attribute: string, tier: string, count: number) => {
+    if (tier === 'Gold' || count < 3) return;
     setForgeMessage('');
     const res = await fetch(`${API_BASE}/api/cards/forge`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attribute: forgeAttribute, tier: forgeTier }),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ attribute, tier }),
     });
     const data = await res.json();
     if (!res.ok) return setForgeMessage(data.error ?? 'Merge failed');
-    setForgeMessage(`Merged 3 ${forgeAttribute} ${forgeTier} cards into 1 ${data.producedTier} card.`);
+    setForgeMessage(`Merged 3 ${attribute} ${tier} cards into 1 ${data.producedTier} card.`);
     await loadData();
   };
 
@@ -156,6 +169,17 @@ export function App() {
     setAdventureMessage(res.ok ? `${data.hint.hintType.toUpperCase()} hint: ${data.hint.text} (milestone bonus now +${Math.round((data.totalMilestoneBonus ?? 0) * 100)}%)` : (data.error ?? 'Hint purchase failed'));
     await loadData();
   };
+
+  const ownedCards = inventory.flatMap((group) =>
+    group.tiers
+      .filter((tierInfo) => tierInfo.count > 0)
+      .map((tierInfo) => ({
+        attribute: group.attribute,
+        tier: tierInfo.tier,
+        count: tierInfo.count,
+        imageUrl: getCardImageUrl(group.attribute, tierInfo.tier),
+      })),
+  );
 
   const investGold = async (role: 'HERO' | 'BUDDY', attribute: string) => {
     setStatsMessage('');
@@ -269,7 +293,7 @@ export function App() {
         <div className="section-heading">
           <p className="eyebrow">Forge cards</p>
           <h2>Card Inventory + Forge</h2>
-          <p>Merge rule: 3 cards of same attribute+tier turns into 1 card of next tier.</p>
+          <p>Merge rule: double-click any non-Gold count of 3+ in the table to turn 3 same attribute+tier cards into 1 card of the next tier.</p>
         </div>
         <div className="table-wrap">
           <table>
@@ -278,17 +302,25 @@ export function App() {
               {inventory.map((row) => (
                 <tr key={row.attribute}>
                   <td>{row.attribute}</td>
-                  {row.tiers.map((tierInfo) => <td key={`${row.attribute}-${tierInfo.tier}`}><span className={`card-count ${tierClassName(tierInfo.tier)}`}>{tierInfo.count}</span></td>)}
+                  {row.tiers.map((tierInfo) => {
+                    const canMerge = tierInfo.tier !== 'Gold' && tierInfo.count >= 3;
+                    return (
+                      <td key={`${row.attribute}-${tierInfo.tier}`}>
+                        <span
+                          aria-label={`${row.attribute} ${tierInfo.tier} count ${tierInfo.count}${canMerge ? ', double-click to merge' : ''}`}
+                          className={`card-count ${tierClassName(tierInfo.tier)} ${canMerge ? 'is-mergeable' : ''}`}
+                          onDoubleClick={() => forgeCards(row.attribute, tierInfo.tier, tierInfo.count)}
+                        >
+                          {tierInfo.count}
+                        </span>
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <form className="forge-controls" onSubmit={forgeCards}>
-          <select value={forgeAttribute} onChange={(e) => setForgeAttribute(e.target.value)}>{ATTRIBUTE_OPTIONS.map((attribute) => <option key={attribute} value={attribute}>{attribute}</option>)}</select>
-          <select value={forgeTier} onChange={(e) => setForgeTier(e.target.value)}>{TIER_OPTIONS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}</select>
-          <button type="submit">Merge 3 → 1</button>
-        </form>
         {forgeMessage && <p className="feedback feedback-info">{forgeMessage}</p>}
       </section>
       )}
@@ -314,9 +346,12 @@ export function App() {
                   const pct = stat.neededGold > 0 ? Math.floor((stat.progressGold / stat.neededGold) * 100) : 0;
                   return (
                     <div className="stat-row" key={`${character.id}-${stat.attribute}`}>
-                      <div>
-                        <strong>{stat.attribute}</strong>
-                        <span>Level {stat.level} · {stat.progressGold}/{stat.neededGold} Gold</span>
+                      <div className="stat-summary">
+                        <div className="stat-title-row">
+                          <strong>{stat.attribute}</strong>
+                          <span className="stat-level-badge"><span>Level</span><b>{stat.level}</b></span>
+                        </div>
+                        <span className="stat-progress-text">{stat.progressGold}/{stat.neededGold} Gold</span>
                       </div>
                       <div className="progress-track" aria-label={`${stat.attribute} progress`}><div className="progress-fill" style={{ width: `${pct}%` }} /></div>
                       <button className="button-secondary" onClick={() => investGold(character.role, stat.attribute)}>Invest 1 Gold</button>
@@ -387,6 +422,30 @@ export function App() {
         {adventureMessage && <p className="feedback feedback-info">{adventureMessage}</p>}
       </section>
       )}
+
+      <aside className="floating-card-pool" aria-label="Owned card pool">
+        <div className="floating-card-pool__header">
+          <span className="eyebrow">Card Pool</span>
+          <span>{ownedCards.length ? `${ownedCards.length} owned stacks` : 'No cards yet'}</span>
+        </div>
+        <div className="floating-card-pool__row">
+          {ownedCards.map((card) => (
+            <article
+              aria-label={`${card.attribute} ${card.tier} card, count ${card.count}`}
+              className="floating-card"
+              key={`${card.attribute}-${card.tier}`}
+              tabIndex={0}
+            >
+              {card.imageUrl ? (
+                <img src={card.imageUrl} alt={`${card.attribute} ${card.tier} card`} />
+              ) : (
+                <div className="floating-card__missing-art" aria-hidden="true">{card.attribute.slice(0, 1)}{card.tier.slice(0, 1)}</div>
+              )}
+              <span className="floating-card__count">x{card.count}</span>
+            </article>
+          ))}
+        </div>
+      </aside>
     </main>
   );
 }
