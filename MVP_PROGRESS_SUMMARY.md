@@ -77,7 +77,7 @@ These are the primary goals for next version work.
 - No cloud dependency required for core use.
 
 ### Core gameplay scope
-- Attributes: Physique, Charisma, Wisdom, Sociability, Farming, Wealth, Survival.
+- Attributes: Physique, Charisma, Wisdom, Sociability, Wealth, Survival.
 - Card tiers: Paper, Rock, Bronze, Silver, Gold.
 - Merge rule: 3 same attribute+tier → 1 of next tier.
 - Task templates map to one attribute + one default tier.

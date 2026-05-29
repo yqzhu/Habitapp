@@ -22,7 +22,6 @@ Complete scheduled tasks → earn attribute cards → merge up to Gold → inves
 - Charisma
 - Wisdom
 - Sociability
-- Farming
 - Wealth
 - Survival
 

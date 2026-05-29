@@ -7,7 +7,7 @@ The product promise:
 > Each day, I complete my scheduled real-life tasks to earn attribute cards, merge them up to Gold, invest Gold into Hero/Buddy stats, and unlock branching adventures that reflect my real-world consistency.
 
 ## Core System Rules
-- Attributes: Physique, Charisma, Wisdom, Sociability, Farming, Wealth, Survival.
+- Attributes: Physique, Charisma, Wisdom, Sociability, Wealth, Survival.
 - Card tiers: Paper → Rock → Bronze → Silver → Gold.
 - Card merge rule: 3 cards of the same tier and same attribute upgrade to 1 card in the next tier.
 - Strict merging: no cross-attribute merges.
