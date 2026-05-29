@@ -13,6 +13,7 @@ const ATTRIBUTE_OPTIONS = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Far
 const TIER_OPTIONS = ['Paper', 'Rock', 'Bronze', 'Silver', 'Gold'];
 const formatLocalDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const todayIso = formatLocalDate(new Date());
+const tierClassName = (tier: string) => `tier-${tier.toLowerCase()}`;
 
 export function App() {
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
@@ -51,8 +52,29 @@ export function App() {
   };
 
   useEffect(() => { loadData(todayIso); }, []);
-  const createTemplate = async (event: FormEvent) => { event.preventDefault(); await fetch(`${API_BASE}/api/task-templates`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newTemplate, startDate: selectedDate }) }); setNewTemplate({ title: '', cadenceRule: 'daily', attribute: 'Physique', baseTier: 'Paper' }); await loadData(); };
-  const createOneOff = async (event: FormEvent) => { event.preventDefault(); await fetch(`${API_BASE}/api/today-board/one-off`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newOneOff, date: selectedDate }) }); setNewOneOff({ title: '', attribute: 'Wisdom', baseTier: 'Paper' }); await loadData(); };
+
+  const createTemplate = async (event: FormEvent) => {
+    event.preventDefault();
+    await fetch(`${API_BASE}/api/task-templates`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newTemplate, startDate: selectedDate }) });
+    setNewTemplate({ title: '', cadenceRule: 'daily', attribute: 'Physique', baseTier: 'Paper' });
+    await loadData();
+  };
+
+  const toggleTemplate = async (template: TaskTemplate) => {
+    await fetch(`${API_BASE}/api/task-templates/${template.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isActive: !template.isActive }),
+    });
+    await loadData();
+  };
+
+  const createOneOff = async (event: FormEvent) => {
+    event.preventDefault();
+    await fetch(`${API_BASE}/api/today-board/one-off`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newOneOff, date: selectedDate }) });
+    setNewOneOff({ title: '', attribute: 'Wisdom', baseTier: 'Paper' });
+    await loadData();
+  };
 
   const completeTask = async (task: TodayTask) => {
     const res = await fetch(`${API_BASE}/api/today-board/${task.id}/status`, {
@@ -69,7 +91,6 @@ export function App() {
     setTodayTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, isDone: true } : t)));
     await loadData();
   };
-
 
   const cancelCadence = async (task: TodayTask) => {
     await fetch(`${API_BASE}/api/today-board/${task.id}/cancel`, { method: 'PATCH' });
@@ -94,8 +115,6 @@ export function App() {
     setForgeMessage(`Merged 3 ${forgeAttribute} ${forgeTier} cards into 1 ${data.producedTier} card.`);
     await loadData();
   };
-
-
 
   const openAdventure = async (id: number, clearMessage = true) => {
     const res = await fetch(`${API_BASE}/api/adventures/${id}`);
@@ -140,11 +159,28 @@ export function App() {
   };
 
   return (
-    <main className="container">
-      <h1>Hero Habit Forge — Phase 6</h1>
+    <main className="app-shell">
+      <header className="hero-banner">
+        <p className="eyebrow">Local-first habit RPG</p>
+        <h1>Hero Habit Forge</h1>
+        <p className="hero-copy">Turn daily effort into cards, forge stronger tiers, and spend Gold to unlock a detective adventure for Hero and Buddy.</p>
+        <div className="hero-stats" aria-label="Current app modules">
+          <span>Templates</span>
+          <span>Today Board</span>
+          <span>Cards + Forge</span>
+          <span>Stats</span>
+          <span>Adventure</span>
+        </div>
+      </header>
 
-      <section><h2>Task Templates</h2>
-        <form onSubmit={createTemplate}><input placeholder="Title" value={newTemplate.title} onChange={(e) => setNewTemplate({ ...newTemplate, title: e.target.value })} required />
+      <section className="panel">
+        <div className="section-heading">
+          <p className="eyebrow">Plan the grind</p>
+          <h2>Task Templates</h2>
+          <p>Define recurring habits with cadence, attribute, and card tier rewards.</p>
+        </div>
+        <form className="control-grid" onSubmit={createTemplate}>
+          <input placeholder="Title" value={newTemplate.title} onChange={(e) => setNewTemplate({ ...newTemplate, title: e.target.value })} required />
           <input list="cadence-options" placeholder="Cadence" value={newTemplate.cadenceRule} onChange={(e) => setNewTemplate({ ...newTemplate, cadenceRule: e.target.value })} required />
           <datalist id="cadence-options">
             <option value="daily" />
@@ -155,93 +191,169 @@ export function App() {
           </datalist>
           <select value={newTemplate.attribute} onChange={(e) => setNewTemplate({ ...newTemplate, attribute: e.target.value })}>{ATTRIBUTE_OPTIONS.map((attribute) => <option key={attribute} value={attribute}>{attribute}</option>)}</select>
           <select value={newTemplate.baseTier} onChange={(e) => setNewTemplate({ ...newTemplate, baseTier: e.target.value })}>{TIER_OPTIONS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}</select>
-          <button type="submit">Add template</button></form>
-        <p>Cadence format: daily, every n day (n=1..30), or every Mon[,Tue,...]. New template starts from selected date.</p>
-        <ul>{templates.map((template) => <li key={template.id}>{template.title} ({template.cadenceRule}) → {template.attribute}/{template.baseTier} — {template.isActive ? 'Active' : 'Paused'}<button onClick={() => toggleTemplate(template)}>{template.isActive ? 'Pause' : 'Activate'}</button></li>)}</ul>
-      </section>
-
-      <section><h2>Today Board</h2>
-        <label>Pick date: <input type="date" min={todayIso} value={selectedDate} onChange={(e) => { setSelectedDate(e.target.value); void loadData(e.target.value); }} /></label>
-        <form onSubmit={createOneOff}><input placeholder="One-off title" value={newOneOff.title} onChange={(e) => setNewOneOff({ ...newOneOff, title: e.target.value })} required />
-          <select value={newOneOff.attribute} onChange={(e) => setNewOneOff({ ...newOneOff, attribute: e.target.value })}>{ATTRIBUTE_OPTIONS.map((attribute) => <option key={attribute} value={attribute}>{attribute}</option>)}</select>
-          <select value={newOneOff.baseTier} onChange={(e) => setNewOneOff({ ...newOneOff, baseTier: e.target.value })}>{TIER_OPTIONS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}</select>
-          <button type="submit">Add one-off</button></form>
-        {boardMessage && <p>{boardMessage}</p>}
-        <ul>{todayTasks.map((task) => <li key={task.id} style={{ opacity: task.isDone ? 0.5 : 1 }}>[{task.status}] {task.template?.title ?? 'One-off task'} — {task.template?.attribute ?? 'Unmapped'} / {task.template?.baseTier ?? 'Paper'} (due {task.scheduledDate.slice(0, 10)})<button disabled={task.isDone} onClick={() => completeTask(task)}>{task.isDone ? 'Done' : 'Mark done'}</button><button onClick={() => cancelCadence(task)}>Cancel cadence</button><button onClick={() => deleteTaskTemplate(task)}>Delete task</button></li>)}</ul>
-      </section>
-
-      <section>
-        <h2>Card Inventory + Forge</h2>
-        <p>Merge rule: 3 cards of same attribute+tier turns into 1 card of next tier.</p>
-        <table><thead><tr><th>Attribute</th>{TIER_OPTIONS.map((tier) => <th key={tier}>{tier}</th>)}</tr></thead>
-          <tbody>{inventory.map((row) => <tr key={row.attribute}><td>{row.attribute}</td>{row.tiers.map((tierInfo) => <td key={`${row.attribute}-${tierInfo.tier}`}>{tierInfo.count}</td>)}</tr>)}</tbody></table>
-        <form onSubmit={forgeCards}><select value={forgeAttribute} onChange={(e) => setForgeAttribute(e.target.value)}>{ATTRIBUTE_OPTIONS.map((attribute) => <option key={attribute} value={attribute}>{attribute}</option>)}</select>
-          <select value={forgeTier} onChange={(e) => setForgeTier(e.target.value)}>{TIER_OPTIONS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}</select><button type="submit">Merge 3 → 1</button></form>
-        {forgeMessage && <p>{forgeMessage}</p>}
-      </section>
-
-      <section>
-        <h2>Hero/Buddy Stats</h2>
-        {statsMessage && <p>{statsMessage}</p>}
-        <div>
-          {characters.map((character) => (
-            <article key={character.id}>
-              <h3>{character.name}</h3>
-              <ul>
-                {character.stats.map((stat) => {
-                  const pct = stat.neededGold > 0 ? Math.floor((stat.progressGold / stat.neededGold) * 100) : 0;
-                  return (
-                    <li key={`${character.id}-${stat.attribute}`}>
-                      <strong>{stat.attribute}</strong>: level {stat.level} — {stat.progressGold}/{stat.neededGold}
-                      <div style={{ width: '220px', border: '1px solid #999', margin: '4px 0', height: '12px' }}>
-                        <div style={{ width: `${pct}%`, background: '#d4af37', height: '100%' }} />
-                      </div>
-                      <button onClick={() => investGold(character.role, stat.attribute)}>Invest 1 Gold</button>
-                    </li>
-                  );
-                })}
-              </ul>
+          <button type="submit">Add template</button>
+        </form>
+        <p className="hint-text">Cadence format: daily, every n day (n=1..30), or every Mon[,Tue,...]. New template starts from selected date.</p>
+        <div className="item-list">
+          {templates.map((template) => (
+            <article className="list-card" key={template.id}>
+              <div>
+                <h3>{template.title}</h3>
+                <p>{template.cadenceRule} → {template.attribute}/{template.baseTier}</p>
+              </div>
+              <span className={`status-pill ${template.isActive ? 'status-active' : 'status-muted'}`}>{template.isActive ? 'Active' : 'Paused'}</span>
+              <button className="button-secondary" onClick={() => toggleTemplate(template)}>{template.isActive ? 'Pause' : 'Activate'}</button>
             </article>
           ))}
         </div>
       </section>
 
-      <section>
-        <h2>Adventure</h2>
-        <ul>
-          {adventures.map((adventure) => (
-            <li key={adventure.id}>
-              Chapter {adventure.chapter}: {adventure.title} [{adventure.status}]
-              <button disabled={adventure.status === 'LOCKED'} onClick={() => openAdventure(adventure.id)}>Open</button>
-            </li>
+      <section className="panel">
+        <div className="section-heading">
+          <p className="eyebrow">Today</p>
+          <h2>Today Board</h2>
+          <p>Review scheduled work, add one-offs, and collect card rewards for completed tasks.</p>
+        </div>
+        <div className="date-row">
+          <label>Pick date: <input type="date" min={todayIso} value={selectedDate} onChange={(e) => { setSelectedDate(e.target.value); void loadData(e.target.value); }} /></label>
+        </div>
+        <form className="control-grid" onSubmit={createOneOff}>
+          <input placeholder="One-off title" value={newOneOff.title} onChange={(e) => setNewOneOff({ ...newOneOff, title: e.target.value })} required />
+          <select value={newOneOff.attribute} onChange={(e) => setNewOneOff({ ...newOneOff, attribute: e.target.value })}>{ATTRIBUTE_OPTIONS.map((attribute) => <option key={attribute} value={attribute}>{attribute}</option>)}</select>
+          <select value={newOneOff.baseTier} onChange={(e) => setNewOneOff({ ...newOneOff, baseTier: e.target.value })}>{TIER_OPTIONS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}</select>
+          <button type="submit">Add one-off</button>
+        </form>
+        {boardMessage && <p className="feedback feedback-info">{boardMessage}</p>}
+        <div className="item-list">
+          {todayTasks.map((task) => (
+            <article className={`list-card task-card ${task.isDone ? 'is-done' : ''}`} key={task.id}>
+              <div>
+                <span className={`status-pill ${task.status === 'ACTIVE' ? 'status-active' : 'status-muted'}`}>{task.status}</span>
+                <h3>{task.template?.title ?? 'One-off task'}</h3>
+                <p>{task.template?.attribute ?? 'Unmapped'} / {task.template?.baseTier ?? 'Paper'} · due {task.scheduledDate.slice(0, 10)}</p>
+              </div>
+              <div className="action-row">
+                <button disabled={task.isDone} onClick={() => completeTask(task)}>{task.isDone ? 'Done' : 'Mark done'}</button>
+                <button className="button-secondary" onClick={() => cancelCadence(task)}>Cancel cadence</button>
+                <button className="button-danger" onClick={() => deleteTaskTemplate(task)}>Delete task</button>
+              </div>
+            </article>
           ))}
-        </ul>
-        {selectedAdventure && (
-          <article>
-            <h3>{selectedAdventure.title}</h3>
-            <p>{selectedAdventure.branches.intro}</p>
-            <p><strong>Current milestone {selectedAdventure.currentMilestone}:</strong> {selectedAdventure.currentMilestoneData?.title ?? 'Completed'}</p>
-            <p>{selectedAdventure.currentMilestoneData?.narrative ?? selectedAdventure.branches.finalReveal}</p>
-            <ul>
-              {(selectedAdventure.currentMilestoneData?.choices ?? []).map((choice) => (
-                <li key={choice.id}><button disabled={selectedAdventure.chapterCompleted} onClick={() => attemptChoice(choice.id)}>{choice.label}</button></li>
-              ))}
-            </ul>
-            <h4>Hints</h4>
-            <p>Each hint adds to your success chance on its milestone. Example: +5% means success chance increases by 5 percentage points. Hint bonuses stack additively, and you need zero fixed hints — buy as many as you want for better odds.</p>
-            <ul>
-              {selectedAdventure.hints.map((hint) => (
-                <li key={hint.id}>
-                  {hint.hintType} (M{hint.price.milestone ?? '?'} | {hint.price.count} {hint.price.attribute}/{hint.price.tier} | +{Math.round((hint.price.bonus ?? 0) * 100)}%)
-                  <button onClick={() => buyHint(hint.id)}>Buy</button>
-                </li>
-              ))}
-            </ul>
-          </article>
-        )}
-        {adventureMessage && <p>{adventureMessage}</p>}
+        </div>
       </section>
 
+      <section className="panel card-panel">
+        <div className="section-heading">
+          <p className="eyebrow">Forge cards</p>
+          <h2>Card Inventory + Forge</h2>
+          <p>Merge rule: 3 cards of same attribute+tier turns into 1 card of next tier.</p>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Attribute</th>{TIER_OPTIONS.map((tier) => <th key={tier}>{tier}</th>)}</tr></thead>
+            <tbody>
+              {inventory.map((row) => (
+                <tr key={row.attribute}>
+                  <td>{row.attribute}</td>
+                  {row.tiers.map((tierInfo) => <td key={`${row.attribute}-${tierInfo.tier}`}><span className={`card-count ${tierClassName(tierInfo.tier)}`}>{tierInfo.count}</span></td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <form className="forge-controls" onSubmit={forgeCards}>
+          <select value={forgeAttribute} onChange={(e) => setForgeAttribute(e.target.value)}>{ATTRIBUTE_OPTIONS.map((attribute) => <option key={attribute} value={attribute}>{attribute}</option>)}</select>
+          <select value={forgeTier} onChange={(e) => setForgeTier(e.target.value)}>{TIER_OPTIONS.map((tier) => <option key={tier} value={tier}>{tier}</option>)}</select>
+          <button type="submit">Merge 3 → 1</button>
+        </form>
+        {forgeMessage && <p className="feedback feedback-info">{forgeMessage}</p>}
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <p className="eyebrow">Grow the party</p>
+          <h2>Hero/Buddy Stats</h2>
+          <p>Invest Gold cards to raise attributes using the existing level threshold.</p>
+        </div>
+        {statsMessage && <p className="feedback feedback-info">{statsMessage}</p>}
+        <div className="character-grid">
+          {characters.map((character) => (
+            <article className="character-card" key={character.id}>
+              <h3>{character.name}</h3>
+              <div className="stat-list">
+                {character.stats.map((stat) => {
+                  const pct = stat.neededGold > 0 ? Math.floor((stat.progressGold / stat.neededGold) * 100) : 0;
+                  return (
+                    <div className="stat-row" key={`${character.id}-${stat.attribute}`}>
+                      <div>
+                        <strong>{stat.attribute}</strong>
+                        <span>Level {stat.level} · {stat.progressGold}/{stat.neededGold} Gold</span>
+                      </div>
+                      <div className="progress-track" aria-label={`${stat.attribute} progress`}><div className="progress-fill" style={{ width: `${pct}%` }} /></div>
+                      <button className="button-secondary" onClick={() => investGold(character.role, stat.attribute)}>Invest 1 Gold</button>
+                    </div>
+                  );
+                })}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel adventure-panel">
+        <div className="section-heading">
+          <p className="eyebrow">Detective casebook</p>
+          <h2>Adventure</h2>
+          <p>Open unlocked chapters, attempt milestone choices, and trade cards for probability hints.</p>
+        </div>
+        <div className="chapter-list">
+          {adventures.map((adventure) => (
+            <article className="list-card" key={adventure.id}>
+              <div>
+                <span className={`status-pill ${adventure.status === 'LOCKED' ? 'status-muted' : 'status-active'}`}>{adventure.status}</span>
+                <h3>Chapter {adventure.chapter}: {adventure.title}</h3>
+                <p>Difficulty {adventure.difficulty}</p>
+              </div>
+              <button disabled={adventure.status === 'LOCKED'} onClick={() => openAdventure(adventure.id)}>Open</button>
+            </article>
+          ))}
+        </div>
+        {selectedAdventure && (
+          <article className="case-file">
+            <div className="case-header">
+              <span className="status-pill status-active">Chapter {selectedAdventure.chapter}</span>
+              <h3>{selectedAdventure.title}</h3>
+            </div>
+            <p>{selectedAdventure.branches.intro}</p>
+            <div className="milestone-card">
+              <p className="eyebrow">Current milestone {selectedAdventure.currentMilestone}</p>
+              <h4>{selectedAdventure.currentMilestoneData?.title ?? 'Completed'}</h4>
+              <p>{selectedAdventure.currentMilestoneData?.narrative ?? selectedAdventure.branches.finalReveal}</p>
+            </div>
+            <div className="choice-grid">
+              {(selectedAdventure.currentMilestoneData?.choices ?? []).map((choice) => (
+                <button disabled={selectedAdventure.chapterCompleted} key={choice.id} onClick={() => attemptChoice(choice.id)}>{choice.label}</button>
+              ))}
+            </div>
+            <div className="hint-box">
+              <h4>Hints</h4>
+              <p>Each hint adds to your success chance on its milestone. Example: +5% means success chance increases by 5 percentage points. Hint bonuses stack additively, and you need zero fixed hints — buy as many as you want for better odds.</p>
+              <div className="hint-list">
+                {selectedAdventure.hints.map((hint) => (
+                  <article className="hint-card" key={hint.id}>
+                    <div>
+                      <strong>{hint.hintType}</strong>
+                      <span>M{hint.price.milestone ?? '?'} · {hint.price.count} {hint.price.attribute}/{hint.price.tier} · +{Math.round((hint.price.bonus ?? 0) * 100)}%</span>
+                    </div>
+                    <button className="button-secondary" onClick={() => buyHint(hint.id)}>Buy</button>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </article>
+        )}
+        {adventureMessage && <p className="feedback feedback-info">{adventureMessage}</p>}
+      </section>
     </main>
   );
 }
