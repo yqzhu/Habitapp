@@ -1,5 +1,8 @@
 import { FormEvent, useEffect, useState } from 'react';
 
+const heroImageUrl = new URL('../../cards/Hero_image.png', import.meta.url).href;
+const buddyImageUrl = new URL('../../cards/Buddy_image.png', import.meta.url).href;
+
 type TaskTemplate = { id: number; title: string; cadenceRule: string; attribute: string; baseTier: string; isActive: boolean };
 type TodayTask = { id: number; status: 'ACTIVE' | 'DONE'; scheduledDate: string; template: TaskTemplate | null; isDone?: boolean };
 type InventoryGroup = { attribute: string; tiers: { tier: string; count: number }[] };
@@ -7,6 +10,7 @@ type CharacterStat = { attribute: string; level: number; progressGold: number; n
 type Character = { id: number; role: 'HERO' | 'BUDDY'; name: string; stats: CharacterStat[] };
 type AdventureListItem = { id: number; chapter: number; title: string; difficulty: number; status: string };
 type AdventureDetail = { id: number; chapter: number; title: string; status: string; currentMilestone: number; chapterCompleted?: boolean; branches: { intro: string; finalReveal?: string }; currentMilestoneData: { index: number; title: string; narrative: string; choices: { id: string; label: string }[] } | null; hints: { id: number; hintType: string; text: string; price: { attribute: string; tier: string; count: number; milestone?: number; bonus?: number } }[] };
+type AppTab = 'templates' | 'today' | 'cards' | 'stats' | 'adventure';
 
 const API_BASE = 'http://localhost:3001';
 const ATTRIBUTE_OPTIONS = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Farming', 'Wealth', 'Survival'];
@@ -14,6 +18,13 @@ const TIER_OPTIONS = ['Paper', 'Rock', 'Bronze', 'Silver', 'Gold'];
 const formatLocalDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const todayIso = formatLocalDate(new Date());
 const tierClassName = (tier: string) => `tier-${tier.toLowerCase()}`;
+const TABS: { id: AppTab; label: string }[] = [
+  { id: 'templates', label: 'Templates' },
+  { id: 'today', label: 'Today Board' },
+  { id: 'cards', label: 'Cards + Forge' },
+  { id: 'stats', label: 'Stats' },
+  { id: 'adventure', label: 'Adventure' },
+];
 
 export function App() {
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
@@ -31,6 +42,7 @@ export function App() {
   const [adventures, setAdventures] = useState<AdventureListItem[]>([]);
   const [selectedAdventure, setSelectedAdventure] = useState<AdventureDetail | null>(null);
   const [adventureMessage, setAdventureMessage] = useState('');
+  const [activeTab, setActiveTab] = useState<AppTab>('templates');
 
   const loadData = async (date = selectedDate) => {
     const [templatesRes, todayRes, inventoryRes, statsRes, adventuresRes] = await Promise.all([
@@ -164,15 +176,22 @@ export function App() {
         <p className="eyebrow">Local-first habit RPG</p>
         <h1>Hero Habit Forge</h1>
         <p className="hero-copy">Turn daily effort into cards, forge stronger tiers, and spend Gold to unlock a detective adventure for Hero and Buddy.</p>
-        <div className="hero-stats" aria-label="Current app modules">
-          <span>Templates</span>
-          <span>Today Board</span>
-          <span>Cards + Forge</span>
-          <span>Stats</span>
-          <span>Adventure</span>
-        </div>
       </header>
 
+      <nav className="tab-toolbar" aria-label="Hero Habit Forge sections">
+        {TABS.map((tab) => (
+          <button
+            className={`tab-button ${activeTab === tab.id ? 'is-active' : ''}`}
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      {activeTab === 'templates' && (
       <section className="panel">
         <div className="section-heading">
           <p className="eyebrow">Plan the grind</p>
@@ -207,7 +226,9 @@ export function App() {
           ))}
         </div>
       </section>
+      )}
 
+      {activeTab === 'today' && (
       <section className="panel">
         <div className="section-heading">
           <p className="eyebrow">Today</p>
@@ -241,7 +262,9 @@ export function App() {
           ))}
         </div>
       </section>
+      )}
 
+      {activeTab === 'cards' && (
       <section className="panel card-panel">
         <div className="section-heading">
           <p className="eyebrow">Forge cards</p>
@@ -268,7 +291,9 @@ export function App() {
         </form>
         {forgeMessage && <p className="feedback feedback-info">{forgeMessage}</p>}
       </section>
+      )}
 
+      {activeTab === 'stats' && (
       <section className="panel">
         <div className="section-heading">
           <p className="eyebrow">Grow the party</p>
@@ -279,8 +304,12 @@ export function App() {
         <div className="character-grid">
           {characters.map((character) => (
             <article className="character-card" key={character.id}>
-              <h3>{character.name}</h3>
-              <div className="stat-list">
+              <figure className="character-portrait">
+                <img src={character.role === 'HERO' ? heroImageUrl : buddyImageUrl} alt={`${character.name} portrait`} />
+              </figure>
+              <div className="character-stats">
+                <h3>{character.name}</h3>
+                <div className="stat-list">
                 {character.stats.map((stat) => {
                   const pct = stat.neededGold > 0 ? Math.floor((stat.progressGold / stat.neededGold) * 100) : 0;
                   return (
@@ -294,12 +323,15 @@ export function App() {
                     </div>
                   );
                 })}
+                </div>
               </div>
             </article>
           ))}
         </div>
       </section>
+      )}
 
+      {activeTab === 'adventure' && (
       <section className="panel adventure-panel">
         <div className="section-heading">
           <p className="eyebrow">Detective casebook</p>
@@ -354,6 +386,7 @@ export function App() {
         )}
         {adventureMessage && <p className="feedback feedback-info">{adventureMessage}</p>}
       </section>
+      )}
     </main>
   );
 }
