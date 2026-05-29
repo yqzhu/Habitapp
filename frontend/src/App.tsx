@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 
-const heroImageUrl = new URL('../../cards/Hero_image.png', import.meta.url).href;
-const buddyImageUrl = new URL('../../cards/Buddy_image.png', import.meta.url).href;
+const heroImageUrl = new URL('../../cards/Hero_updated.png', import.meta.url).href;
+const buddyImageUrl = new URL('../../cards/Buddy_updated.png', import.meta.url).href;
 
 type TaskTemplate = { id: number; title: string; cadenceRule: string; attribute: string; baseTier: string; isActive: boolean };
 type TodayTask = { id: number; status: 'ACTIVE' | 'DONE'; scheduledDate: string; template: TaskTemplate | null; isDone?: boolean };
