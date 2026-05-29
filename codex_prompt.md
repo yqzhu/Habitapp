@@ -9,7 +9,7 @@ Build a local-first single-user web app for macOS called "Hero Habit Forge".
 - Local run only (no auth, no cloud dependency for core operation)
 
 ## Core Design Rules
-- Attributes: Physique, Charisma, Wisdom, Sociability, Farming, Wealth, Survival
+- Attributes: Physique, Charisma, Wisdom, Sociability, Wealth, Survival
 - Card tiers: Paper, Rock, Bronze, Silver, Gold
 - Merge: 3 cards of same attribute+tier -> 1 card of next tier
 - Tasks are user-defined templates with cadence and fixed attribute+tier mapping

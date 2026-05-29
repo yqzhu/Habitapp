@@ -11,7 +11,6 @@ Existing core attributes:
 - charisma
 - wisdom
 - sociability
-- farming
 - wealth
 - survival
 
@@ -101,11 +100,6 @@ Use this baseline unless adjusted by explicit balancing notes:
   - low: make initial contacts
   - mid: navigate groups/factions
   - high: unlock hidden social channels
-
-- farming:
-  - low: identify common crop/soil signs
-  - mid: detect tampering in rural supply chains
-  - high: decode advanced agrarian patterns tied to crime
 
 - wealth:
   - low: basic paid access

@@ -13,7 +13,7 @@ type AdventureDetail = { id: number; chapter: number; title: string; status: str
 type AppTab = 'templates' | 'today' | 'cards' | 'stats' | 'adventure';
 
 const API_BASE = 'http://localhost:3001';
-const ATTRIBUTE_OPTIONS = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Farming', 'Wealth', 'Survival'];
+const ATTRIBUTE_OPTIONS = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Wealth', 'Survival'];
 const TIER_OPTIONS = ['Paper', 'Rock', 'Bronze', 'Silver', 'Gold'];
 const formatLocalDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const todayIso = formatLocalDate(new Date());

@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-const attributes = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Farming', 'Wealth', 'Survival'];
+const attributes = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Wealth', 'Survival'];
 const CARD_TIERS = ['Paper', 'Rock', 'Bronze', 'Silver', 'Gold'];
 
 async function main() {

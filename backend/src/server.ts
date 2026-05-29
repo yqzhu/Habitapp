@@ -6,7 +6,8 @@ const app = express();
 const prisma = new PrismaClient();
 const port = Number(process.env.PORT ?? 3001);
 
-const CANONICAL_ATTRIBUTES = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Farming', 'Wealth', 'Survival'] as const;
+const CANONICAL_ATTRIBUTES = ['Physique', 'Charisma', 'Wisdom', 'Sociability', 'Wealth', 'Survival'] as const;
+const CANONICAL_ATTRIBUTE_LIST = [...CANONICAL_ATTRIBUTES];
 const CANONICAL_TIERS = ['Paper', 'Rock', 'Bronze', 'Silver', 'Gold'] as const;
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
@@ -76,7 +77,7 @@ app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ ok: true, app: 'Hero Habit Forge API' }));
 app.get('/api/bootstrap', (_req, res) => res.json({ appName: 'Hero Habit Forge', phase: 'Cards + Forge', next: 'Hero/Buddy stats' }));
-app.get('/api/task-templates', async (_req, res) => res.json(await prisma.taskTemplate.findMany({ orderBy: { id: 'asc' } })));
+app.get('/api/task-templates', async (_req, res) => res.json(await prisma.taskTemplate.findMany({ where: { attribute: { in: CANONICAL_ATTRIBUTE_LIST } }, orderBy: { id: 'asc' } })));
 
 app.post('/api/task-templates', async (req, res) => {
   const { title, cadenceRule, attribute, baseTier, startDate } = req.body;
@@ -115,7 +116,7 @@ app.delete('/api/task-templates/:id', async (req, res) => {
 app.get('/api/today-board', async (req, res) => {
   const boardDate = parseLocalDate(typeof req.query.date === 'string' ? req.query.date : undefined);
 
-  const activeTemplates = await prisma.taskTemplate.findMany({ where: { isActive: true }, orderBy: { id: 'asc' } });
+  const activeTemplates = await prisma.taskTemplate.findMany({ where: { isActive: true, attribute: { in: CANONICAL_ATTRIBUTE_LIST } }, orderBy: { id: 'asc' } });
   for (const template of activeTemplates) {
     const earliest = await prisma.taskInstance.findFirst({ where: { templateId: template.id }, orderBy: { scheduledDate: 'asc' } });
     const anchorDate = earliest ? atMidnight(earliest.scheduledDate) : boardDate;
@@ -127,9 +128,10 @@ app.get('/api/today-board', async (req, res) => {
 
   const allActive = await prisma.taskInstance.findMany({ where: { status: 'ACTIVE', scheduledDate: { lte: boardDate } }, orderBy: [{ scheduledDate: 'asc' }, { id: 'asc' }] });
   const templateIds = [...new Set(allActive.map((task: { templateId: number | null }) => task.templateId).filter((id: number | null): id is number => id !== null))];
-  const templates = await prisma.taskTemplate.findMany({ where: { id: { in: templateIds } } });
+  const templates = await prisma.taskTemplate.findMany({ where: { id: { in: templateIds }, attribute: { in: CANONICAL_ATTRIBUTE_LIST } } });
   const templateMap = new Map(templates.map((t: { id: number }) => [t.id, t]));
-  res.json({ boardDate: boardDate.toISOString().slice(0, 10), tasks: allActive.map((task: { templateId: number | null }) => ({ ...task, template: task.templateId ? templateMap.get(task.templateId) ?? null : null })) });
+  const visibleTasks = allActive.filter((task: { templateId: number | null }) => task.templateId !== null && templateMap.has(task.templateId));
+  res.json({ boardDate: boardDate.toISOString().slice(0, 10), tasks: visibleTasks.map((task: { templateId: number | null }) => ({ ...task, template: task.templateId ? templateMap.get(task.templateId) ?? null : null })) });
 });
 
 app.post('/api/today-board/one-off', async (req, res) => {
