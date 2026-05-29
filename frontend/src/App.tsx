@@ -149,7 +149,10 @@ export function App() {
   const openAdventure = async (id: number, clearMessage = true) => {
     const res = await fetch(`${API_BASE}/api/adventures/${id}`);
     const data = await res.json();
-    if (!res.ok) return setAdventureMessage(data.error ?? 'Could not load chapter');
+    if (!res.ok) {
+      setLastOutcome(null);
+      return setAdventureMessage(data.error ?? 'Could not load chapter');
+    }
     setSelectedAdventure(data);
     if (clearMessage) {
       setAdventureMessage('');
@@ -177,6 +180,7 @@ export function App() {
         chapterCompleted: data.chapterCompleted,
       });
     } else {
+      setLastOutcome(null);
       setAdventureMessage(data.error ?? 'Attempt failed');
     }
     await loadData();
@@ -196,6 +200,7 @@ export function App() {
         totalMilestoneBonus: data.totalMilestoneBonus,
       });
     } else {
+      setLastOutcome(null);
       setAdventureMessage(data.error ?? 'Hint purchase failed');
     }
     await loadData();
@@ -529,43 +534,57 @@ export function App() {
               </article>
             )}
 
-            {(lastOutcome || adventureMessage) && (
-              <article className={`outcome-card ${adventureMessage ? 'is-error' : ''}`}>
-                <p className="eyebrow">Latest result</p>
-                {adventureMessage && (
-                  <>
-                    <h3>Adventure notice</h3>
-                    <p>{adventureMessage}</p>
-                  </>
-                )}
-                {lastOutcome?.kind === 'attempt' && (
-                  <>
-                    <div className="outcome-card__header">
-                      <h3>{lastOutcome.outcome ? `${lastOutcome.outcome.toUpperCase()} outcome` : 'Choice outcome'}</h3>
-                      {lastOutcome.milestone && <span className="status-pill status-muted">Milestone {lastOutcome.milestone}</span>}
-                    </div>
-                    {lastOutcome.narrative && <p>{lastOutcome.narrative}</p>}
-                    {lastOutcome.explanation && <p className="outcome-explanation">{lastOutcome.explanation}</p>}
-                    {lastOutcome.chapterCompleted && lastOutcome.reveal && (
-                      <div className="final-reveal">
-                        <strong>Final reveal</strong>
-                        <p>{lastOutcome.reveal}</p>
-                      </div>
-                    )}
-                  </>
-                )}
-                {lastOutcome?.kind === 'hint' && (
-                  <>
-                    <div className="outcome-card__header">
-                      <h3>{lastOutcome.hintType ? `${lastOutcome.hintType.toUpperCase()} hint purchased` : 'Hint purchased'}</h3>
-                      <span className="status-pill status-muted">Bonus +{Math.round((lastOutcome.totalMilestoneBonus ?? 0) * 100)}%</span>
-                    </div>
-                    {lastOutcome.text && <p>{lastOutcome.text}</p>}
-                  </>
-                )}
-              </article>
-            )}
           </div>
+
+          {(lastOutcome || adventureMessage) && (
+            <aside className={`outcome-toast ${adventureMessage ? 'is-error' : ''}`} role="status" aria-live="polite">
+              <div className="outcome-toast__topline">
+                <p className="eyebrow">Latest result</p>
+                <button
+                  className="outcome-toast__close"
+                  type="button"
+                  aria-label="Close latest result"
+                  onClick={() => {
+                    setAdventureMessage('');
+                    setLastOutcome(null);
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+              {adventureMessage && (
+                <>
+                  <h3>Adventure notice</h3>
+                  <p>{adventureMessage}</p>
+                </>
+              )}
+              {lastOutcome?.kind === 'attempt' && (
+                <>
+                  <div className="outcome-card__header">
+                    <h3>{lastOutcome.outcome ? `${lastOutcome.outcome.toUpperCase()} outcome` : 'Choice outcome'}</h3>
+                    {lastOutcome.milestone && <span className="status-pill status-muted">Milestone {lastOutcome.milestone}</span>}
+                  </div>
+                  {lastOutcome.narrative && <p>{lastOutcome.narrative}</p>}
+                  {lastOutcome.explanation && <p className="outcome-explanation">{lastOutcome.explanation}</p>}
+                  {lastOutcome.chapterCompleted && lastOutcome.reveal && (
+                    <div className="final-reveal">
+                      <strong>Final reveal</strong>
+                      <p>{lastOutcome.reveal}</p>
+                    </div>
+                  )}
+                </>
+              )}
+              {lastOutcome?.kind === 'hint' && (
+                <>
+                  <div className="outcome-card__header">
+                    <h3>{lastOutcome.hintType ? `${lastOutcome.hintType.toUpperCase()} hint purchased` : 'Hint purchased'}</h3>
+                    <span className="status-pill status-muted">Bonus +{Math.round((lastOutcome.totalMilestoneBonus ?? 0) * 100)}%</span>
+                  </div>
+                  {lastOutcome.text && <p>{lastOutcome.text}</p>}
+                </>
+              )}
+            </aside>
+          )}
         </div>
       </section>
       )}
