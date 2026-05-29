@@ -669,8 +669,8 @@ th {
 .floating-card {
   position: relative;
   flex: 0 0 auto;
-  width: clamp(68px, 8vw, 92px);
-  aspect-ratio: 2 / 3;
+  height: clamp(102px, 12vw, 138px);
+  aspect-ratio: 2 / 5;
   border: 1px solid rgba(243, 196, 92, 0.34);
   border-radius: 12px;
   background: rgba(8, 11, 22, 0.68);
@@ -732,6 +732,6 @@ th {
   }
 
   .floating-card {
-    width: 64px;
+    height: 96px;
   }
 }
