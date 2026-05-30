@@ -217,6 +217,10 @@ export function App() {
       })),
   );
 
+  const currentMilestoneHints = selectedAdventure
+    ? selectedAdventure.hints.filter((hint) => hint.price.milestone === selectedAdventure.currentMilestone)
+    : [];
+
   const investGold = async (role: 'HERO' | 'BUDDY', attribute: string) => {
     setStatsMessage('');
     const res = await fetch(`${API_BASE}/api/stats/invest`, {
@@ -507,13 +511,21 @@ export function App() {
                       <span className="eyebrow">Optional support</span>
                       <strong>Hint drawer</strong>
                     </span>
-                    <span className="hint-drawer__count">{selectedAdventure.hints.length} available</span>
+                    <span className="hint-drawer__count">{currentMilestoneHints.length} available</span>
                   </button>
                   {isHintDrawerOpen && (
                     <div className="hint-drawer__body">
                       <p>Each hint adds to your success chance on its milestone. Example: +5% means success chance increases by 5 percentage points. Hint bonuses stack additively, and you need zero fixed hints — buy as many as you want for better odds.</p>
                       <div className="hint-list">
-                        {selectedAdventure.hints.map((hint) => (
+                        {currentMilestoneHints.length === 0 && (
+                          <article className="hint-card">
+                            <div className="hint-card__copy">
+                              <strong>No hints for this milestone</strong>
+                              <span>Advance the case or reopen an active chapter to see milestone-specific support.</span>
+                            </div>
+                          </article>
+                        )}
+                        {currentMilestoneHints.map((hint) => (
                           <article className="hint-card" key={hint.id}>
                             <div className="hint-card__copy">
                               <strong>{hint.hintType}</strong>
