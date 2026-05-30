@@ -172,6 +172,25 @@ async function main() {
     ],
   };
 
+  await prisma.adventure.upsert({
+    where: { id: 1 },
+    update: {
+      chapter: 1,
+      title: 'The Sapphire at Dawnmarket',
+      requirementsJson: JSON.stringify(chapter1Requirements),
+      branchesJson: JSON.stringify(chapter1Branches),
+      difficulty: 1,
+    },
+    create: {
+      id: 1,
+      chapter: 1,
+      title: 'The Sapphire at Dawnmarket',
+      requirementsJson: JSON.stringify(chapter1Requirements),
+      branchesJson: JSON.stringify(chapter1Branches),
+      difficulty: 1,
+    },
+  });
+
   const chapter2Requirements = { unlock: { chapterComplete: 1 }, recommended: ['Wisdom 1', 'Sociability 1'] };
   const chapter2Branches = {
     intro: 'After exposing Elias, you investigate his financier known only as The Broker.',
